@@ -208,14 +208,20 @@ export default function EditContractPage({ params }: { params: Promise<{ id: str
                 <label htmlFor="previousSupplier" className="label">
                   Previous Supplier
                 </label>
-                <input
+                <select
                   id="previousSupplier"
                   name="previousSupplier"
-                  type="text"
                   value={formData.previousSupplier}
                   onChange={handleChange}
                   className="input"
-                />
+                >
+                  <option value="">Select previous supplier</option>
+                  {suppliers.map((supplier) => (
+                    <option key={supplier.id} value={supplier.name}>
+                      {supplier.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
@@ -313,7 +319,7 @@ export default function EditContractPage({ params }: { params: Promise<{ id: str
               </div>
               <div>
                 <label htmlFor="commsSC" className="label">
-                  Standing Charge Commission
+                  Standing Charge Commission (p/day)
                 </label>
                 <input
                   id="commsSC"
@@ -324,6 +330,7 @@ export default function EditContractPage({ params }: { params: Promise<{ id: str
                   value={formData.commsSC}
                   onChange={handleChange}
                   className="input"
+                  placeholder="e.g., 0.5"
                 />
               </div>
               <div>
