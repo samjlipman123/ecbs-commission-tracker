@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+:root {
+  /* ECBS Brand Colors */
+  --ecbs-navy: #1a365d;
+  --ecbs-navy-light: #2d4a7c;
+  --ecbs-teal: #0d9488;
+  --ecbs-teal-light: #14b8a6;
+  --ecbs-slate: #475569;
+  --ecbs-gray: #f1f5f9;
+  --ecbs-gray-dark: #e2e8f0;
+
+  /* Status Colors */
+  --ecbs-green: #22c55e;
+  --ecbs-amber: #f59e0b;
+  --ecbs-red: #ef4444;
+
+  --background: #f8fafc;
+  --foreground: #1e293b;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-ecbs-navy: var(--ecbs-navy);
+  --color-ecbs-navy-light: var(--ecbs-navy-light);
+  --color-ecbs-teal: var(--ecbs-teal);
+  --color-ecbs-teal-light: var(--ecbs-teal-light);
+  --color-ecbs-slate: var(--ecbs-slate);
+  --color-ecbs-gray: var(--ecbs-gray);
+  --color-ecbs-gray-dark: var(--ecbs-gray-dark);
+  --color-ecbs-green: var(--ecbs-green);
+  --color-ecbs-amber: var(--ecbs-amber);
+  --color-ecbs-red: var(--ecbs-red);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ecbs-gray);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ecbs-slate);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ecbs-navy);
+}
+
+/* Table styles */
+.table-container {
+  @apply overflow-x-auto rounded-lg border border-gray-200 bg-white;
+}
+
+.table-container table {
+  @apply min-w-full divide-y divide-gray-200;
+}
+
+.table-container th {
+  @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 bg-gray-50;
+}
+
+.table-container td {
+  @apply px-4 py-3 text-sm text-gray-700 whitespace-nowrap;
+}
+
+.table-container tbody tr {
+  @apply hover:bg-gray-50 transition-colors;
+}
+
+/* Card styles */
+.card {
+  @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+}
+
+/* Button styles */
+.btn-primary {
+  @apply bg-[var(--ecbs-teal)] hover:bg-[var(--ecbs-teal-light)] text-white font-medium py-2 px-4 rounded-lg transition-colors;
+}
+
+.btn-secondary {
+  @apply bg-[var(--ecbs-navy)] hover:bg-[var(--ecbs-navy-light)] text-white font-medium py-2 px-4 rounded-lg transition-colors;
+}
+
+.btn-outline {
+  @apply border border-gray-300 hover:border-gray-400 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors bg-white;
+}
+
+/* Input styles */
+.input {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--ecbs-teal)] focus:border-transparent outline-none transition-all;
+}
+
+.label {
+  @apply block text-sm font-medium text-gray-700 mb-1;
+}
+
+/* Status badges */
+.badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.badge-green {
+  @apply bg-green-100 text-green-800;
+}
+
+.badge-amber {
+  @apply bg-amber-100 text-amber-800;
+}
+
+.badge-blue {
+  @apply bg-blue-100 text-blue-800;
+}
+
+.badge-gray {
+  @apply bg-gray-100 text-gray-800;
+}
