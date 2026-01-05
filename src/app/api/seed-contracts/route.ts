@@ -119,15 +119,19 @@ export async function GET(request: Request) {
       });
     }
 
-    // Create all contracts in a transaction
-    const createdContracts = await prisma.$transaction(
-      contractsToCreate.map(({ supplierName, ...contractData }) =>
-        prisma.contract.create({
-          data: contractData,
-          include: { supplier: true },
-        })
-      )
-    );
+    // Create contracts one by one to avoid transaction limits
+    const createdContracts = [];
+    const supplierMap = new Map(suppliers.map(s => [s.id, s.name]));
+
+    for (const { supplierName, ...contractData } of contractsToCreate) {
+      const contract = await prisma.contract.create({
+        data: contractData,
+      });
+      createdContracts.push({
+        ...contract,
+        supplierName: supplierMap.get(contract.supplierId) || supplierName,
+      });
+    }
 
     // Calculate and create all projections
     const allProjections: {
@@ -137,15 +141,14 @@ export async function GET(request: Request) {
       paymentType: string;
     }[] = [];
 
-    for (let i = 0; i < createdContracts.length; i++) {
-      const contract = createdContracts[i];
+    for (const contract of createdContracts) {
       const projections = calculatePaymentProjections({
         lockInDate: contract.lockInDate,
         contractStartDate: contract.contractStartDate,
         contractEndDate: contract.contractEndDate,
         contractValue: contract.contractValue,
         commsUR: contract.commsUR,
-        supplierName: contract.supplier.name,
+        supplierName: contract.supplierName,
       });
 
       for (const p of projections) {
@@ -158,10 +161,11 @@ export async function GET(request: Request) {
       }
     }
 
-    // Batch create all projections
+    // Batch create all projections with skipDuplicates to handle any potential conflicts
     if (allProjections.length > 0) {
       await prisma.paymentProjection.createMany({
         data: allProjections,
+        skipDuplicates: true,
       });
     }
 
@@ -170,7 +174,7 @@ export async function GET(request: Request) {
       contracts: createdContracts.slice(0, 10).map(c => ({
         id: c.id,
         companyName: c.companyName,
-        supplier: c.supplier.name,
+        supplier: c.supplierName,
         contractValue: c.contractValue,
       })),
       totalCreated: createdContracts.length,
