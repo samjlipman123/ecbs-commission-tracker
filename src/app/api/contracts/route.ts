@@ -105,16 +105,16 @@ export async function POST(request: NextRequest) {
       data: {
         lockInDate: new Date(lockInDate),
         companyName,
-        meterNumber,
-        previousSupplier,
+        meterNumber: meterNumber || null,
+        previousSupplier: previousSupplier || null,
         energyType: energyType || 'Electric',
         supplierId,
-        commsSC: commsSC || 0,
-        commsUR: parseFloat(commsUR),
+        commsSC: parseFloat(commsSC) || 0,
+        commsUR: parseFloat(commsUR) || 0,
         contractStartDate: new Date(contractStartDate),
         contractEndDate: new Date(contractEndDate),
-        contractValue: parseFloat(contractValue),
-        notes,
+        contractValue: parseFloat(contractValue) || 0,
+        notes: notes || null,
       },
       include: { supplier: true },
     });
@@ -144,6 +144,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(contract, { status: 201 });
   } catch (error) {
     console.error('Contract creation error:', error);
-    return NextResponse.json({ error: 'Failed to create contract' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: 'Failed to create contract', details: errorMessage }, { status: 500 });
   }
 }
