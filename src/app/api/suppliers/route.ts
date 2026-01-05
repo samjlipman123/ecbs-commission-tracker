@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session) {
@@ -11,8 +11,11 @@ export async function GET() {
   }
 
   try {
+    const searchParams = request.nextUrl.searchParams;
+    const includeAll = searchParams.get('includeAll') === 'true';
+
     const suppliers = await prisma.supplier.findMany({
-      where: { isActive: true },
+      where: includeAll ? {} : { isActive: true },
       orderBy: { name: 'asc' },
     });
 
