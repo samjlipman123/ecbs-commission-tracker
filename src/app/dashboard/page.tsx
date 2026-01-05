@@ -188,7 +188,7 @@ export default function DashboardPage() {
                       tickFormatter={(value) => `£${(value / 1000).toFixed(0)}k`}
                     />
                     <Tooltip
-                      formatter={(value: number) => [formatCurrency(value), 'Projected']}
+                      formatter={(value) => [formatCurrency(Number(value)), 'Projected']}
                       labelStyle={{ color: '#374151' }}
                       contentStyle={{
                         backgroundColor: '#fff',
@@ -237,7 +237,7 @@ export default function DashboardPage() {
                       width={100}
                     />
                     <Tooltip
-                      formatter={(value: number) => [formatCurrency(value), 'Value']}
+                      formatter={(value) => [formatCurrency(Number(value)), 'Value']}
                       contentStyle={{
                         backgroundColor: '#fff',
                         border: '1px solid #e5e7eb',

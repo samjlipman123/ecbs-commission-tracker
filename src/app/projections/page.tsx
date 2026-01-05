@@ -205,7 +205,7 @@ export default function ProjectionsPage() {
                         tickFormatter={(value) => `£${(value / 1000).toFixed(0)}k`}
                       />
                       <Tooltip
-                        formatter={(value: number) => [formatCurrency(value), 'Projected']}
+                        formatter={(value) => [formatCurrency(Number(value)), 'Projected']}
                         labelStyle={{ color: '#374151' }}
                         contentStyle={{
                           backgroundColor: '#fff',
@@ -252,7 +252,7 @@ export default function ProjectionsPage() {
                         width={120}
                       />
                       <Tooltip
-                        formatter={(value: number) => [formatCurrency(value), 'Projected']}
+                        formatter={(value) => [formatCurrency(Number(value)), 'Projected']}
                         contentStyle={{
                           backgroundColor: '#fff',
                           border: '1px solid #e5e7eb',
