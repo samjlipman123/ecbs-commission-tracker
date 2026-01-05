@@ -41,6 +41,8 @@ interface DashboardStats {
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
+  const [seedMessage, setSeedMessage] = useState('');
 
   useEffect(() => {
     fetchDashboardStats();
@@ -55,6 +57,27 @@ export default function DashboardPage() {
       console.error('Failed to fetch dashboard stats:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const generateDemoData = async () => {
+    setSeeding(true);
+    setSeedMessage('');
+    try {
+      const response = await fetch('/api/seed-contracts?force=true');
+      const data = await response.json();
+      if (response.ok) {
+        setSeedMessage(`Success! Created ${data.totalCreated} mock contracts.`);
+        // Refresh dashboard stats
+        await fetchDashboardStats();
+      } else {
+        setSeedMessage(`Error: ${data.error || 'Failed to create contracts'}`);
+      }
+    } catch (error) {
+      setSeedMessage('Error: Failed to connect to server');
+      console.error('Seed error:', error);
+    } finally {
+      setSeeding(false);
     }
   };
 
@@ -296,9 +319,23 @@ export default function DashboardPage() {
             <div className="text-center py-8 text-gray-500">
               <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
               <p>No contracts yet. Add your first contract to get started.</p>
-              <a href="/contracts/new" className="btn-primary mt-4 inline-block">
-                Add Contract
-              </a>
+              <div className="flex justify-center gap-3 mt-4">
+                <a href="/contracts/new" className="btn-primary inline-block">
+                  Add Contract
+                </a>
+                <button
+                  onClick={generateDemoData}
+                  disabled={seeding}
+                  className="btn-outline disabled:opacity-50"
+                >
+                  {seeding ? 'Generating...' : 'Generate Demo Data'}
+                </button>
+              </div>
+              {seedMessage && (
+                <p className={`mt-3 text-sm ${seedMessage.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
+                  {seedMessage}
+                </p>
+              )}
             </div>
           )}
         </div>
