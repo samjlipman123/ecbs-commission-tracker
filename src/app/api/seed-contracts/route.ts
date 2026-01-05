@@ -40,7 +40,7 @@ function randomFloat(min: number, max: number, decimals: number = 2): number {
   return parseFloat((Math.random() * (max - min) + min).toFixed(decimals));
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
 
   if (!session) {
@@ -48,13 +48,22 @@ export async function GET() {
   }
 
   try {
+    const url = new URL(request.url);
+    const force = url.searchParams.get('force') === 'true';
+
     // Check if contracts already exist
     const existingCount = await prisma.contract.count();
-    if (existingCount >= 50) {
+    if (existingCount >= 50 && !force) {
       return NextResponse.json({
-        message: 'Mock contracts already exist',
+        message: 'Mock contracts already exist. Add ?force=true to regenerate.',
         count: existingCount
       });
+    }
+
+    // If forcing, delete existing contracts and projections
+    if (force && existingCount > 0) {
+      await prisma.paymentProjection.deleteMany({});
+      await prisma.contract.deleteMany({});
     }
 
     // Get all suppliers
