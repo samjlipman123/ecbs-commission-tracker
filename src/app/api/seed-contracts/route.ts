@@ -40,6 +40,8 @@ function randomFloat(min: number, max: number, decimals: number = 2): number {
   return parseFloat((Math.random() * (max - min) + min).toFixed(decimals));
 }
 
+export const maxDuration = 60; // Allow up to 60 seconds for this endpoint
+
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
 
@@ -72,98 +74,107 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'No suppliers found. Run /api/setup first.' }, { status: 400 });
     }
 
-    const contracts = [];
     const today = new Date();
+    const contractsToCreate = [];
 
+    // Prepare all contract data first
     for (let i = 0; i < 50; i++) {
-      // Distribute contracts across all suppliers
       const supplier = suppliers[i % suppliers.length];
 
-      // Generate dates
-      // Lock-in date: between 6 months ago and 2 months ago
       const lockInDate = randomDate(
         addMonths(today, -6),
         addMonths(today, -2)
       );
 
-      // Contract start date: 1-6 months after lock-in
       const contractStartDate = randomDate(
         addMonths(lockInDate, 1),
         addMonths(lockInDate, 6)
       );
 
-      // Contract end date: 1-5 years after start
       const contractYears = Math.floor(Math.random() * 5) + 1;
       const contractEndDate = addYears(contractStartDate, contractYears);
-
-      // Energy type: roughly 60% electric, 40% gas
       const energyType = Math.random() > 0.4 ? 'Electric' : 'Gas';
-
-      // Commission values
-      const commsUR = randomFloat(0.5, 3.5); // 0.5p to 3.5p per kWh
-      const commsSC = Math.random() > 0.7 ? randomFloat(0.1, 1.0) : 0; // 30% chance of standing charge commission
-
-      // Contract value based on commission rate and contract length
+      const commsUR = randomFloat(0.5, 3.5);
+      const commsSC = Math.random() > 0.7 ? randomFloat(0.1, 1.0) : 0;
       const baseValue = randomFloat(500, 15000);
       const contractValue = baseValue * contractYears;
-
-      // Previous supplier (50% chance of having one)
       const previousSupplier = Math.random() > 0.5
         ? suppliers[Math.floor(Math.random() * suppliers.length)].name
         : null;
 
-      // Create contract
-      const contract = await prisma.contract.create({
-        data: {
-          lockInDate,
-          companyName: generateCompanyName(i),
-          meterNumber: generateMeterNumber(),
-          previousSupplier,
-          energyType,
-          supplierId: supplier.id,
-          commsSC,
-          commsUR,
-          contractStartDate,
-          contractEndDate,
-          contractValue,
-          notes: i % 5 === 0 ? 'Priority customer' : null,
-        },
-        include: { supplier: true },
+      contractsToCreate.push({
+        lockInDate,
+        companyName: generateCompanyName(i),
+        meterNumber: generateMeterNumber(),
+        previousSupplier,
+        energyType,
+        supplierId: supplier.id,
+        commsSC,
+        commsUR,
+        contractStartDate,
+        contractEndDate,
+        contractValue,
+        notes: i % 5 === 0 ? 'Priority customer' : null,
+        supplierName: supplier.name, // Store for projection calculation
       });
+    }
 
-      // Calculate and store payment projections
+    // Create all contracts in a transaction
+    const createdContracts = await prisma.$transaction(
+      contractsToCreate.map(({ supplierName, ...contractData }) =>
+        prisma.contract.create({
+          data: contractData,
+          include: { supplier: true },
+        })
+      )
+    );
+
+    // Calculate and create all projections
+    const allProjections: {
+      contractId: string;
+      month: Date;
+      amount: number;
+      paymentType: string;
+    }[] = [];
+
+    for (let i = 0; i < createdContracts.length; i++) {
+      const contract = createdContracts[i];
       const projections = calculatePaymentProjections({
         lockInDate: contract.lockInDate,
         contractStartDate: contract.contractStartDate,
         contractEndDate: contract.contractEndDate,
         contractValue: contract.contractValue,
         commsUR: contract.commsUR,
-        supplierName: supplier.name,
+        supplierName: contract.supplier.name,
       });
 
-      if (projections.length > 0) {
-        await prisma.paymentProjection.createMany({
-          data: projections.map((p) => ({
-            contractId: contract.id,
-            month: startOfMonth(p.month),
-            amount: p.amount,
-            paymentType: p.paymentType,
-          })),
+      for (const p of projections) {
+        allProjections.push({
+          contractId: contract.id,
+          month: startOfMonth(p.month),
+          amount: p.amount,
+          paymentType: p.paymentType,
         });
       }
+    }
 
-      contracts.push({
-        id: contract.id,
-        companyName: contract.companyName,
-        supplier: supplier.name,
-        contractValue: contract.contractValue,
+    // Batch create all projections
+    if (allProjections.length > 0) {
+      await prisma.paymentProjection.createMany({
+        data: allProjections,
       });
     }
 
     return NextResponse.json({
       message: 'Successfully created 50 mock contracts',
-      contracts: contracts.slice(0, 10), // Return first 10 as sample
-      totalCreated: contracts.length,
+      contracts: createdContracts.slice(0, 10).map(c => ({
+        id: c.id,
+        companyName: c.companyName,
+        supplier: c.supplier.name,
+        contractValue: c.contractValue,
+      })),
+      totalCreated: createdContracts.length,
+      projectionsCreated: allProjections.length,
     });
   } catch (error) {
     console.error('Seed contracts error:', error);
