@@ -48,11 +48,11 @@ async function main() {
   const hashedPassword = await bcrypt.hash('ecbs2024!', 10);
 
   const user = await prisma.user.upsert({
-    where: { email: 'admin@ecbs.co.uk' },
+    where: { email: 'sam.lipman@ecbs.co.uk' },
     update: {},
     create: {
-      email: 'admin@ecbs.co.uk',
-      name: 'ECBS Admin',
+      email: 'sam.lipman@ecbs.co.uk',
+      name: 'Sam Lipman',
       password: hashedPassword,
     },
   });
