@@ -1,7 +1,7 @@
 'use client';
 
 import DashboardLayout from '@/components/DashboardLayout';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { format, addYears, startOfMonth } from 'date-fns';
 import {
   LineChart,
@@ -284,7 +284,7 @@ export default function ProjectionsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {projections.reduce((acc: { rows: JSX.Element[]; cumulative: number }, projection, index) => {
+                    {projections.reduce((acc: { rows: React.ReactElement[]; cumulative: number }, projection) => {
                       const newCumulative = acc.cumulative + projection.amount;
                       acc.rows.push(
                         <tr key={projection.monthKey}>
