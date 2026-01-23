@@ -81,7 +81,7 @@ export async function PUT(
         previousSupplier: body.previousSupplier,
         energyType: body.energyType,
         supplierId: body.supplierId,
-        commsSC: body.commsSC || 0,
+        commsSC: parseFloat(body.commsSC) || 0,
         commsUR: parseFloat(body.commsUR),
         contractStartDate: new Date(body.contractStartDate),
         contractEndDate: new Date(body.contractEndDate),
