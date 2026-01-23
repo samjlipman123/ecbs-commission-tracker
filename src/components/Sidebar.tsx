@@ -8,7 +8,7 @@ import {
   FileText,
   Calendar,
   Download,
-  Settings,
+  Upload,
   LogOut,
   Building2,
 } from 'lucide-react';
@@ -16,6 +16,7 @@ import {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Contracts', href: '/contracts', icon: FileText },
+  { name: 'Import', href: '/import', icon: Upload },
   { name: 'Projections', href: '/projections', icon: Calendar },
   { name: 'Export', href: '/export', icon: Download },
   { name: 'Suppliers', href: '/suppliers', icon: Building2 },

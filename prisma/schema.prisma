@@ -14,12 +14,12 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -60,7 +60,7 @@ model VerificationToken {
 model Supplier {
   id           String     @id @default(cuid())
   name         String     @unique
-  paymentTerms String     @db.Text // JSON string with payment rules
+  paymentTerms String // JSON string with payment rules
   upliftCap    Float?     // Maximum uplift rate (p/kWh)
   isActive     Boolean    @default(true)
   contracts    Contract[]
@@ -82,7 +82,7 @@ model Contract {
   contractStartDate DateTime // CSD
   contractEndDate   DateTime // CED
   contractValue    Float     // Total commission value
-  notes            String?   @db.Text
+  notes            String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

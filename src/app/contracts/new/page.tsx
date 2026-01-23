@@ -40,7 +40,9 @@ export default function NewContractPage() {
     try {
       const response = await fetch('/api/suppliers');
       const data = await response.json();
-      setSuppliers(data);
+      if (response.ok && Array.isArray(data)) {
+        setSuppliers(data);
+      }
     } catch (error) {
       console.error('Failed to fetch suppliers:', error);
     }

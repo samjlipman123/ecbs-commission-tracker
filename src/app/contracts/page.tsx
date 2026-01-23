@@ -53,7 +53,9 @@ export default function ContractsPage() {
     try {
       const response = await fetch('/api/suppliers');
       const data = await response.json();
-      setSuppliers(data);
+      if (response.ok && Array.isArray(data)) {
+        setSuppliers(data);
+      }
     } catch (error) {
       console.error('Failed to fetch suppliers:', error);
     }
@@ -71,8 +73,10 @@ export default function ContractsPage() {
 
       const response = await fetch(`/api/contracts?${params}`);
       const data = await response.json();
-      setContracts(data.contracts);
-      setTotalPages(data.pagination.totalPages);
+      if (response.ok && data.contracts && data.pagination) {
+        setContracts(data.contracts);
+        setTotalPages(data.pagination.totalPages);
+      }
     } catch (error) {
       console.error('Failed to fetch contracts:', error);
     } finally {

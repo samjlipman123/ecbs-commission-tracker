@@ -515,56 +515,67 @@ function calculateDefault(contract: ContractData): PaymentProjection[] {
 export function calculatePaymentProjections(contract: ContractData): PaymentProjection[] {
   const supplierName = contract.supplierName.trim().toLowerCase();
 
-  // Map supplier names to calculation functions
-  if (supplierName === 'british gas' || supplierName === 'british gas lite') {
+  // British Gas
+  if (supplierName === 'british gas acquisition') {
     return calculateBritishGas(contract);
   }
-
-  if (supplierName === 'british gas renewals' || supplierName === 'british gas renewal') {
+  if (supplierName === 'british gas renewal') {
     return calculateBritishGasRenewals(contract);
   }
 
-  if (supplierName === 'brook green supply') {
+  // Brook Green - all variants use the same calculation with uplift cap logic
+  if (supplierName.startsWith('brook green')) {
     return calculateBrookGreenSupply(contract);
   }
 
-  if (supplierName === 'corona upfront' || supplierName === 'corona') {
+  // Corona - upfront variants use different logic
+  if (supplierName === 'corona acquisition upfront' || supplierName === 'corona renewal upfront') {
     return calculateCoronaUpfront(contract);
   }
+  if (supplierName === 'corona acquisition no upfront' || supplierName === 'corona renewal no upfront') {
+    return calculateDefault(contract); // Standard 80/20
+  }
 
-  if (supplierName === 'crown gas & power' || supplierName === 'crown gas & power upfront') {
+  // Crown Gas & Power - all variants use same calculation
+  if (supplierName.startsWith('crown gas & power')) {
     return calculateCrownGasPower(contract);
   }
 
-  if (supplierName === 'engie upfront' || supplierName === 'engie' || supplierName === 'engie renewal') {
+  // Engie - acquisition vs renewal have different terms
+  if (supplierName.startsWith('engie acquisition')) {
     return calculateEngieUpfront(contract);
   }
-
-  if (supplierName === 'eonnext' || supplierName === 'eon next') {
-    return calculateEonNext(contract);
+  if (supplierName.startsWith('engie renewal')) {
+    return calculateDefault(contract); // Standard 80/20 on live
   }
 
-  if (supplierName === 'eonnext renewal' || supplierName === 'eon next renewal') {
+  // EonNext
+  if (supplierName === 'eonnext acquisition') {
+    return calculateEonNext(contract);
+  }
+  if (supplierName === 'eonnext renewal') {
     return calculateEonNextRenewal(contract);
   }
 
-  if (supplierName.includes('npower')) {
+  // Npower - all variants use same calculation
+  if (supplierName.startsWith('npower')) {
     return calculateNpower(contract);
   }
 
-  if (supplierName === 'smartest energy') {
+  // Smartest Energy
+  if (supplierName.startsWith('smartest energy')) {
     return calculateSmartestEnergy(contract);
   }
 
-  if (supplierName === 'totalenergies' || supplierName === 'total energies') {
+  // Totalenergies - acquisition vs renewal have different terms
+  if (supplierName.startsWith('totalenergies acquisition')) {
     return calculateTotalEnergies(contract);
   }
-
-  if (supplierName === 'total energies renewal' || supplierName === 'totalenergies renewal') {
+  if (supplierName.startsWith('totalenergies renewal')) {
     return calculateTotalEnergiesRenewal(contract);
   }
 
-  // Default for any other supplier
+  // Default for any other supplier (standard 80% live, 20% reconciliation)
   return calculateDefault(contract);
 }
 

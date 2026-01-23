@@ -52,7 +52,10 @@ export default function DashboardPage() {
     try {
       const response = await fetch('/api/dashboard/stats');
       const data = await response.json();
-      setStats(data);
+      // Only set stats if the response was successful and has the expected shape
+      if (response.ok && data.monthlyProjections) {
+        setStats(data);
+      }
     } catch (error) {
       console.error('Failed to fetch dashboard stats:', error);
     } finally {
