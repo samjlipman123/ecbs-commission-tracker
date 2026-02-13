@@ -103,6 +103,89 @@ export async function GET() {
       value: s._sum.contractValue || 0,
     }));
 
+    // === Payment Status Calculations ===
+
+    // Get total projected payments up to current month (what should have been received)
+    const totalProjectedToDate = await prisma.paymentProjection.aggregate({
+      where: {
+        month: {
+          lte: monthEnd,
+        },
+      },
+      _sum: { amount: true },
+    });
+
+    // Get total actual payments received
+    const totalActualReceived = await prisma.actualPayment.aggregate({
+      _sum: { amount: true },
+    });
+
+    const projectedToDateAmount = totalProjectedToDate._sum.amount || 0;
+    const actualReceivedAmount = totalActualReceived._sum.amount || 0;
+    const percentageReceived = projectedToDateAmount > 0
+      ? Math.round((actualReceivedAmount / projectedToDateAmount) * 100)
+      : 0;
+
+    // Get supplier payment status
+    // First, get all projections grouped by supplier
+    const projectionsWithSupplier = await prisma.paymentProjection.findMany({
+      include: {
+        contract: {
+          include: { supplier: true },
+        },
+        actualPayment: true,
+      },
+    });
+
+    // Group by supplier and calculate paid/outstanding/upcoming
+    const supplierStatusMap = new Map<string, {
+      supplierId: string;
+      supplierName: string;
+      paid: number;
+      outstanding: number;
+      outstandingCount: number;
+      upcoming: number;
+      upcomingCount: number;
+    }>();
+
+    for (const projection of projectionsWithSupplier) {
+      const supplierId = projection.contract.supplierId;
+      const supplierName = projection.contract.supplier.name;
+
+      if (!supplierStatusMap.has(supplierId)) {
+        supplierStatusMap.set(supplierId, {
+          supplierId,
+          supplierName,
+          paid: 0,
+          outstanding: 0,
+          outstandingCount: 0,
+          upcoming: 0,
+          upcomingCount: 0,
+        });
+      }
+
+      const status = supplierStatusMap.get(supplierId)!;
+      const projectionMonth = new Date(projection.month);
+
+      if (projection.actualPayment) {
+        // Has an actual payment linked
+        status.paid += projection.actualPayment.amount;
+      } else if (projectionMonth <= monthEnd) {
+        // Due but not paid (outstanding)
+        status.outstanding += projection.amount;
+        status.outstandingCount += 1;
+      } else {
+        // Not yet due (upcoming)
+        status.upcoming += projection.amount;
+        status.upcomingCount += 1;
+      }
+    }
+
+    // Convert map to array and sort by outstanding (needs chasing) first
+    const supplierPaymentStatus = Array.from(supplierStatusMap.values())
+      .sort((a, b) => b.outstanding - a.outstanding)
+      .slice(0, 10); // Top 10 suppliers
+
     return NextResponse.json({
       totalContracts,
       totalContractValue,
@@ -117,6 +200,13 @@ export async function GET() {
         contractStartDate: c.contractStartDate.toISOString(),
       })),
       supplierBreakdown: supplierBreakdownWithNames,
+      // Payment status data
+      paymentStatus: {
+        totalProjectedToDate: projectedToDateAmount,
+        totalActualReceived: actualReceivedAmount,
+        percentageReceived,
+      },
+      supplierPaymentStatus,
     });
   } catch (error) {
     console.error('Dashboard stats error:', error);

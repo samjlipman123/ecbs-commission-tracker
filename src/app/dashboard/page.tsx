@@ -1,6 +1,8 @@
 'use client';
 
 import DashboardLayout from '@/components/DashboardLayout';
+import PaymentStatusGauge from '@/components/PaymentStatusGauge';
+import SupplierPaymentCard from '@/components/SupplierPaymentCard';
 import { useEffect, useState } from 'react';
 import {
   TrendingUp,
@@ -22,6 +24,22 @@ import {
   Bar,
 } from 'recharts';
 
+interface PaymentStatus {
+  totalProjectedToDate: number;
+  totalActualReceived: number;
+  percentageReceived: number;
+}
+
+interface SupplierPaymentStatus {
+  supplierId: string;
+  supplierName: string;
+  paid: number;
+  outstanding: number;
+  outstandingCount: number;
+  upcoming: number;
+  upcomingCount: number;
+}
+
 interface DashboardStats {
   totalContracts: number;
   totalContractValue: number;
@@ -36,6 +54,8 @@ interface DashboardStats {
     contractStartDate: string;
   }[];
   supplierBreakdown: { name: string; value: number }[];
+  paymentStatus?: PaymentStatus;
+  supplierPaymentStatus?: SupplierPaymentStatus[];
 }
 
 export default function DashboardPage() {
@@ -281,6 +301,56 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* Payment Status Section */}
+        {displayStats.paymentStatus && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Payment Collection Gauge */}
+            <div className="lg:col-span-1">
+              <PaymentStatusGauge
+                received={displayStats.paymentStatus.totalActualReceived}
+                expected={displayStats.paymentStatus.totalProjectedToDate}
+              />
+            </div>
+
+            {/* Supplier Payment Status Cards */}
+            <div className="lg:col-span-2">
+              <div className="card">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Supplier Payment Status</h3>
+                  <a
+                    href="/actual-payments"
+                    className="text-sm text-[var(--ecbs-teal)] hover:underline"
+                  >
+                    Manage payments
+                  </a>
+                </div>
+                {displayStats.supplierPaymentStatus && displayStats.supplierPaymentStatus.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {displayStats.supplierPaymentStatus.slice(0, 6).map((supplier) => (
+                      <SupplierPaymentCard
+                        key={supplier.supplierId}
+                        supplierName={supplier.supplierName}
+                        paid={supplier.paid}
+                        outstanding={supplier.outstanding}
+                        outstandingCount={supplier.outstandingCount}
+                        upcoming={supplier.upcoming}
+                        upcomingCount={supplier.upcomingCount}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No payment data available yet.</p>
+                    <a href="/actual-payments" className="text-[var(--ecbs-teal)] hover:underline mt-2 inline-block">
+                      Record your first payment
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Recent Contracts Table */}
         <div className="card">

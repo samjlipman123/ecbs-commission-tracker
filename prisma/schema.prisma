@@ -87,6 +87,7 @@ model Contract {
   updatedAt        DateTime  @updatedAt
 
   paymentProjections PaymentProjection[]
+  actualPayments     ActualPayment[]
 
   @@index([companyName])
   @@index([supplierId])
@@ -103,7 +104,29 @@ model PaymentProjection {
   paymentType String   // "signature", "live", "reconciliation", "arrears"
   createdAt   DateTime @default(now())
 
+  actualPayment ActualPayment? // Link to actual payment when received
+
   @@unique([contractId, month, paymentType])
   @@index([month])
   @@index([contractId])
+}
+
+model ActualPayment {
+  id                  String             @id @default(cuid())
+  contractId          String
+  contract            Contract           @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  paymentProjectionId String?            @unique // Optional link to match against specific projection
+  paymentProjection   PaymentProjection? @relation(fields: [paymentProjectionId], references: [id], onDelete: SetNull)
+
+  amount              Float              // Actual amount received
+  dateReceived        DateTime           // When payment was received
+  referenceNumber     String?            // Supplier reference/invoice number
+  paymentType         String             // "signature", "live", "reconciliation", "arrears"
+  notes               String?            // Any notes about the payment
+
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([contractId])
+  @@index([dateReceived])
 }

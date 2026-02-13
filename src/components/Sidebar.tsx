@@ -11,6 +11,7 @@ import {
   Upload,
   LogOut,
   Building2,
+  Wallet,
 } from 'lucide-react';
 
 const navigation = [
@@ -18,6 +19,7 @@ const navigation = [
   { name: 'Contracts', href: '/contracts', icon: FileText },
   { name: 'Import', href: '/import', icon: Upload },
   { name: 'Projections', href: '/projections', icon: Calendar },
+  { name: 'Payments', href: '/actual-payments', icon: Wallet },
   { name: 'Export', href: '/export', icon: Download },
   { name: 'Suppliers', href: '/suppliers', icon: Building2 },
 ];
