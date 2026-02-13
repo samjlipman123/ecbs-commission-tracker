@@ -153,6 +153,7 @@ export default function SuppliersPage() {
   const [showNewForm, setShowNewForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -402,6 +403,35 @@ export default function SuppliersPage() {
     setEditingSupplier(supplier.id);
     setShowNewForm(true);
     setError('');
+  };
+
+  const handleDelete = async (supplier: Supplier) => {
+    const confirmMessage = `Are you sure you want to delete "${supplier.name}"?\n\nIf this supplier has existing contracts, it will be marked as inactive instead of deleted.`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    setDeleting(supplier.id);
+    setError('');
+
+    try {
+      const response = await fetch(`/api/suppliers/${supplier.id}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete supplier');
+      }
+
+      await fetchSuppliers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete supplier');
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const formatPaymentTermsDisplay = (termsJson: string): string => {
@@ -857,6 +887,17 @@ export default function SuppliersPage() {
                         title="Edit supplier"
                       >
                         <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(supplier);
+                        }}
+                        disabled={deleting === supplier.id}
+                        className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                        title="Delete supplier"
+                      >
+                        <Trash2 className={`w-4 h-4 ${deleting === supplier.id ? 'animate-pulse' : ''}`} />
                       </button>
                       {expandedSupplier === supplier.id ? (
                         <ChevronUp className="w-5 h-5 text-gray-400" />
