@@ -139,3 +139,39 @@ export function getSuggestedSuppliers(input: string): string[] {
 export function isValidSupplier(input: string): boolean {
   return findSupplierMatch(input) !== null;
 }
+
+// --- Dynamic matching against database suppliers ---
+
+/**
+ * Find a matching supplier from a dynamic list (exact case-insensitive match only)
+ * @param input - The supplier name from the uploaded file
+ * @param supplierNames - List of valid supplier names from the database
+ * @returns The matched supplier name or null if not found
+ */
+export function findSupplierMatchDynamic(input: string, supplierNames: string[]): string | null {
+  const normalized = input.toLowerCase().trim();
+
+  for (const name of supplierNames) {
+    if (name.toLowerCase().trim() === normalized) {
+      return name;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Get suggested suppliers from a dynamic list based on partial match
+ * @param input - Partial supplier name
+ * @param supplierNames - List of valid supplier names from the database
+ * @returns Array of suggested supplier names (max 5)
+ */
+export function getSuggestedSuppliersDynamic(input: string, supplierNames: string[]): string[] {
+  const normalized = input.toLowerCase().trim();
+  if (!normalized) return [];
+
+  return supplierNames.filter((s) => {
+    const supplierNorm = s.toLowerCase();
+    return supplierNorm.includes(normalized) || normalized.includes(supplierNorm);
+  }).slice(0, 5);
+}

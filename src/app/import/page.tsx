@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Upload, GitCompare, CheckCircle, Eye, Loader, ArrowLeft } from 'lucide-react';
@@ -25,6 +25,19 @@ export default function ImportPage() {
   const [importResults, setImportResults] = useState<ImportResponse | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [dbSupplierNames, setDbSupplierNames] = useState<string[]>([]);
+
+  // Fetch supplier names from the database on mount
+  useEffect(() => {
+    fetch('/api/suppliers')
+      .then((res) => res.json())
+      .then((suppliers) => {
+        if (Array.isArray(suppliers)) {
+          setDbSupplierNames(suppliers.map((s: { name: string }) => s.name));
+        }
+      })
+      .catch((err) => console.error('Failed to fetch suppliers:', err));
+  }, []);
 
   // Step configuration
   const steps = [
@@ -56,9 +69,13 @@ export default function ImportPage() {
   const handleMappingComplete = (mapping: ColumnMapping) => {
     setColumnMapping(mapping);
 
-    // Run validation
+    // Run validation (use database suppliers if available)
     if (parsedData) {
-      const results = validateAllRows(parsedData.rows, mapping);
+      const results = validateAllRows(
+        parsedData.rows,
+        mapping,
+        dbSupplierNames.length > 0 ? dbSupplierNames : undefined
+      );
       setValidationResults(results);
     }
 

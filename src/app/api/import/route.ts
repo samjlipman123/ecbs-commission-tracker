@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       const rowNumber = i + 1;
 
       try {
-        // Find supplier by name
+        // Find supplier by name (exact case-insensitive match)
         const supplier = supplierMap.get(
           importContract.supplierName.toLowerCase().trim()
         );

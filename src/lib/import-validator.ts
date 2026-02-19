@@ -2,7 +2,7 @@
 
 import { parse, isValid } from 'date-fns';
 import type { ColumnMapping, ValidationResult, ValidationError, ValidationWarning, ImportContract } from '@/types/import';
-import { findSupplierMatch, getSuggestedSuppliers } from './supplier-list';
+import { findSupplierMatch, getSuggestedSuppliers, findSupplierMatchDynamic, getSuggestedSuppliersDynamic } from './supplier-list';
 import { TARGET_FIELDS } from './column-mapper';
 
 // Supported date formats for parsing
@@ -49,8 +49,8 @@ export function parseDate(value: string): Date | null {
 export function parseNumber(value: string): number {
   if (!value || !value.trim()) return NaN;
 
-  // Remove currency symbols, commas, and spaces
-  const cleaned = value.trim().replace(/[£$€,\s]/g, '');
+  // Strip everything except digits, decimal point, and minus sign
+  const cleaned = value.trim().replace(/[^0-9.\-]/g, '');
 
   const num = parseFloat(cleaned);
   return num;
@@ -79,7 +79,8 @@ export function normalizeEnergyType(value: string): 'Gas' | 'Electric' | null {
 export function validateRow(
   row: Record<string, string>,
   rowNumber: number,
-  mapping: ColumnMapping
+  mapping: ColumnMapping,
+  dbSupplierNames?: string[]
 ): ValidationResult {
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];
@@ -109,14 +110,18 @@ export function validateRow(
     }
   }
 
-  // Validate supplier name against fixed list
+  // Validate supplier name against database suppliers (or hardcoded list as fallback)
   const supplierColumn = mapping.supplierName;
   if (supplierColumn && row[supplierColumn]) {
     const supplierValue = row[supplierColumn].trim();
-    const matchedSupplier = findSupplierMatch(supplierValue);
+    const matchedSupplier = dbSupplierNames
+      ? findSupplierMatchDynamic(supplierValue, dbSupplierNames)
+      : findSupplierMatch(supplierValue);
 
     if (!matchedSupplier) {
-      const suggestions = getSuggestedSuppliers(supplierValue);
+      const suggestions = dbSupplierNames
+        ? getSuggestedSuppliersDynamic(supplierValue, dbSupplierNames)
+        : getSuggestedSuppliers(supplierValue);
       errors.push({
         field: 'supplierName',
         message: `Supplier "${supplierValue}" not found in valid supplier list`,
@@ -229,7 +234,8 @@ export function validateRow(
  */
 export function transformRowToContract(
   row: Record<string, string>,
-  mapping: ColumnMapping
+  mapping: ColumnMapping,
+  dbSupplierNames?: string[]
 ): ImportContract {
   const getValue = (key: keyof ColumnMapping): string => {
     const column = mapping[key];
@@ -237,7 +243,9 @@ export function transformRowToContract(
   };
 
   const supplierValue = getValue('supplierName');
-  const matchedSupplier = findSupplierMatch(supplierValue) || supplierValue;
+  const matchedSupplier = (dbSupplierNames
+    ? findSupplierMatchDynamic(supplierValue, dbSupplierNames)
+    : findSupplierMatch(supplierValue)) || supplierValue;
 
   const lockInDate = parseDate(getValue('lockInDate'));
   const csd = parseDate(getValue('contractStartDate'));
@@ -263,9 +271,10 @@ export function transformRowToContract(
  */
 export function validateAllRows(
   rows: Record<string, string>[],
-  mapping: ColumnMapping
+  mapping: ColumnMapping,
+  dbSupplierNames?: string[]
 ): ValidationResult[] {
-  return rows.map((row, index) => validateRow(row, index + 1, mapping));
+  return rows.map((row, index) => validateRow(row, index + 1, mapping, dbSupplierNames));
 }
 
 /**
