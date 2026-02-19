@@ -14,7 +14,7 @@ import {
   BarChart,
   Bar,
 } from 'recharts';
-import { Calendar, TrendingUp, Download } from 'lucide-react';
+import { Calendar, TrendingUp, Download, RefreshCw } from 'lucide-react';
 
 interface MonthlyProjection {
   month: string;
@@ -34,6 +34,8 @@ export default function ProjectionsPage() {
   const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(addYears(new Date(), 2), 'yyyy-MM-dd'));
   const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateMessage, setRegenerateMessage] = useState('');
 
   useEffect(() => {
     fetchProjections();
@@ -74,6 +76,25 @@ export default function ProjectionsPage() {
     window.location.href = `/api/export?startDate=${startDate}&endDate=${endDate}&type=projections`;
   };
 
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    setRegenerateMessage('');
+    try {
+      const response = await fetch('/api/projections/regenerate', { method: 'POST' });
+      const data = await response.json();
+      if (response.ok) {
+        setRegenerateMessage(`Regenerated projections for ${data.regenerated}/${data.total} contracts.`);
+        fetchProjections();
+      } else {
+        setRegenerateMessage(`Error: ${data.error}`);
+      }
+    } catch (error) {
+      setRegenerateMessage('Failed to regenerate projections.');
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -83,11 +104,32 @@ export default function ProjectionsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Payment Projections</h1>
             <p className="text-gray-500">Forecast your commission income through 2035</p>
           </div>
-          <button onClick={handleExport} className="btn-primary flex items-center">
-            <Download className="w-5 h-5 mr-2" />
-            Export CSV
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleRegenerate}
+              disabled={regenerating}
+              className="btn-outline flex items-center disabled:opacity-50"
+            >
+              <RefreshCw className={`w-5 h-5 mr-2 ${regenerating ? 'animate-spin' : ''}`} />
+              {regenerating ? 'Regenerating...' : 'Regenerate Projections'}
+            </button>
+            <button onClick={handleExport} className="btn-primary flex items-center">
+              <Download className="w-5 h-5 mr-2" />
+              Export CSV
+            </button>
+          </div>
         </div>
+
+        {/* Regenerate Message */}
+        {regenerateMessage && (
+          <div className={`p-4 rounded-lg text-sm ${
+            regenerateMessage.startsWith('Error') || regenerateMessage.startsWith('Failed')
+              ? 'bg-red-50 border border-red-200 text-red-600'
+              : 'bg-green-50 border border-green-200 text-green-600'
+          }`}>
+            {regenerateMessage}
+          </div>
+        )}
 
         {/* Filters */}
         <div className="card">
