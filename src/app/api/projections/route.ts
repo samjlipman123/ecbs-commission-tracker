@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { calculatePaymentProjections } from '@/lib/payment-calculator';
 import { startOfMonth, endOfMonth, parseISO, format, eachMonthOfInterval } from 'date-fns';
 
 export async function GET(request: NextRequest) {
@@ -12,77 +13,98 @@ export async function GET(request: NextRequest) {
   }
 
   const searchParams = request.nextUrl.searchParams;
-  const startDate = searchParams.get('startDate');
-  const endDate = searchParams.get('endDate');
-  const groupBy = searchParams.get('groupBy') || 'month'; // month, supplier, company
+  const startDateParam = searchParams.get('startDate');
+  const endDateParam = searchParams.get('endDate');
+  const groupBy = searchParams.get('groupBy') || 'month';
 
   try {
-    const where: Record<string, unknown> = {};
+    // Fetch all contracts with their suppliers
+    const contracts = await prisma.contract.findMany({
+      include: { supplier: true },
+    });
 
-    if (startDate && endDate) {
-      where.month = {
-        gte: startOfMonth(parseISO(startDate)),
-        lte: endOfMonth(parseISO(endDate)),
-      };
+    // Calculate projections dynamically from contract data
+    const allProjections: {
+      month: Date;
+      amount: number;
+      paymentType: string;
+      companyName: string;
+      supplierName: string;
+      contractId: string;
+    }[] = [];
+
+    for (const contract of contracts) {
+      const projections = calculatePaymentProjections({
+        lockInDate: contract.lockInDate,
+        contractStartDate: contract.contractStartDate,
+        contractEndDate: contract.contractEndDate,
+        contractValue: contract.contractValue,
+        commsUR: contract.commsUR,
+        supplierName: contract.supplier.name,
+      });
+
+      for (const p of projections) {
+        const projMonth = startOfMonth(p.month);
+
+        // Apply date filter
+        if (startDateParam && endDateParam) {
+          const rangeStart = startOfMonth(parseISO(startDateParam));
+          const rangeEnd = endOfMonth(parseISO(endDateParam));
+          if (projMonth < rangeStart || projMonth > rangeEnd) continue;
+        }
+
+        allProjections.push({
+          month: projMonth,
+          amount: p.amount,
+          paymentType: p.paymentType,
+          companyName: contract.companyName,
+          supplierName: contract.supplier.name,
+          contractId: contract.id,
+        });
+      }
     }
 
     if (groupBy === 'month') {
-      // Get projections grouped by month
-      const projections = await prisma.paymentProjection.groupBy({
-        by: ['month'],
-        where,
-        _sum: { amount: true },
-        orderBy: { month: 'asc' },
-      });
+      // Aggregate by month
+      const monthTotals = new Map<string, number>();
+      for (const p of allProjections) {
+        const key = format(p.month, 'yyyy-MM');
+        monthTotals.set(key, (monthTotals.get(key) || 0) + p.amount);
+      }
 
       // Fill in missing months with zero
-      if (startDate && endDate) {
+      if (startDateParam && endDateParam) {
         const months = eachMonthOfInterval({
-          start: parseISO(startDate),
-          end: parseISO(endDate),
+          start: parseISO(startDateParam),
+          end: parseISO(endDateParam),
         });
-
-        const projectionMap = new Map(
-          projections.map((p) => [format(p.month, 'yyyy-MM'), p._sum.amount || 0])
-        );
 
         const filledProjections = months.map((month) => ({
           month: format(month, 'MMM yyyy'),
           monthKey: format(month, 'yyyy-MM'),
-          amount: projectionMap.get(format(month, 'yyyy-MM')) || 0,
+          amount: monthTotals.get(format(month, 'yyyy-MM')) || 0,
         }));
 
         return NextResponse.json(filledProjections);
       }
 
-      return NextResponse.json(
-        projections.map((p) => ({
-          month: format(p.month, 'MMM yyyy'),
-          monthKey: format(p.month, 'yyyy-MM'),
-          amount: p._sum.amount || 0,
-        }))
-      );
+      const sorted = Array.from(monthTotals.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, amount]) => ({
+          month: format(parseISO(key + '-01'), 'MMM yyyy'),
+          monthKey: key,
+          amount,
+        }));
+
+      return NextResponse.json(sorted);
     }
 
     if (groupBy === 'supplier') {
-      // Get projections with contract and supplier info
-      const projections = await prisma.paymentProjection.findMany({
-        where,
-        include: {
-          contract: {
-            include: { supplier: true },
-          },
-        },
-      });
-
-      // Group by supplier
       const supplierTotals = new Map<string, { name: string; amount: number }>();
-
-      for (const p of projections) {
-        const supplierName = p.contract.supplier.name;
-        const current = supplierTotals.get(supplierName) || { name: supplierName, amount: 0 };
+      for (const p of allProjections) {
+        const current = supplierTotals.get(p.supplierName) || { name: p.supplierName, amount: 0 };
         current.amount += p.amount;
-        supplierTotals.set(supplierName, current);
+        supplierTotals.set(p.supplierName, current);
       }
 
       return NextResponse.json(
@@ -91,22 +113,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (groupBy === 'company') {
-      // Get projections with contract info
-      const projections = await prisma.paymentProjection.findMany({
-        where,
-        include: {
-          contract: true,
-        },
-      });
-
-      // Group by company
       const companyTotals = new Map<string, { name: string; amount: number }>();
-
-      for (const p of projections) {
-        const companyName = p.contract.companyName;
-        const current = companyTotals.get(companyName) || { name: companyName, amount: 0 };
+      for (const p of allProjections) {
+        const current = companyTotals.get(p.companyName) || { name: p.companyName, amount: 0 };
         current.amount += p.amount;
-        companyTotals.set(companyName, current);
+        companyTotals.set(p.companyName, current);
       }
 
       return NextResponse.json(
@@ -115,27 +126,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Detailed projections
-    const projections = await prisma.paymentProjection.findMany({
-      where,
-      include: {
-        contract: {
-          include: { supplier: true },
-        },
-      },
-      orderBy: { month: 'asc' },
-    });
-
     return NextResponse.json(
-      projections.map((p) => ({
-        id: p.id,
-        month: format(p.month, 'MMM yyyy'),
-        monthKey: format(p.month, 'yyyy-MM'),
-        amount: p.amount,
-        paymentType: p.paymentType,
-        companyName: p.contract.companyName,
-        supplierName: p.contract.supplier.name,
-        contractId: p.contractId,
-      }))
+      allProjections
+        .sort((a, b) => a.month.getTime() - b.month.getTime())
+        .map((p) => ({
+          month: format(p.month, 'MMM yyyy'),
+          monthKey: format(p.month, 'yyyy-MM'),
+          amount: p.amount,
+          paymentType: p.paymentType,
+          companyName: p.companyName,
+          supplierName: p.supplierName,
+          contractId: p.contractId,
+        }))
     );
   } catch (error) {
     console.error('Projections fetch error:', error);

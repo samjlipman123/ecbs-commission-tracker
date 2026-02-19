@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { calculatePaymentProjections } from '@/lib/payment-calculator';
 import { startOfMonth, endOfMonth, startOfYear, endOfYear, addMonths, format } from 'date-fns';
 
 export async function GET() {
@@ -21,57 +22,65 @@ export async function GET() {
     });
     const totalContractValue = contractValueResult._sum.contractValue || 0;
 
-    // Get current month's projection
     const now = new Date();
     const monthStart = startOfMonth(now);
     const monthEnd = endOfMonth(now);
-
-    const currentMonthProjections = await prisma.paymentProjection.aggregate({
-      where: {
-        month: {
-          gte: monthStart,
-          lte: monthEnd,
-        },
-      },
-      _sum: { amount: true },
-    });
-    const currentMonthProjection = currentMonthProjections._sum.amount || 0;
-
-    // Get current year's projection
     const yearStart = startOfYear(now);
     const yearEnd = endOfYear(now);
 
-    const currentYearProjections = await prisma.paymentProjection.aggregate({
-      where: {
-        month: {
-          gte: yearStart,
-          lte: yearEnd,
-        },
-      },
-      _sum: { amount: true },
+    // Fetch all contracts with suppliers and calculate projections dynamically
+    const contracts = await prisma.contract.findMany({
+      include: { supplier: true },
     });
-    const currentYearProjection = currentYearProjections._sum.amount || 0;
 
-    // Get next 12 months projections
+    // Calculate all projections from contract data
+    const allProjections: { month: Date; amount: number; paymentType: string; supplierId: string; supplierName: string }[] = [];
+
+    for (const contract of contracts) {
+      const projections = calculatePaymentProjections({
+        lockInDate: contract.lockInDate,
+        contractStartDate: contract.contractStartDate,
+        contractEndDate: contract.contractEndDate,
+        contractValue: contract.contractValue,
+        commsUR: contract.commsUR,
+        supplierName: contract.supplier.name,
+      });
+
+      for (const p of projections) {
+        allProjections.push({
+          month: startOfMonth(p.month),
+          amount: p.amount,
+          paymentType: p.paymentType,
+          supplierId: contract.supplierId,
+          supplierName: contract.supplier.name,
+        });
+      }
+    }
+
+    // Current month projection
+    const currentMonthProjection = allProjections
+      .filter((p) => p.month >= monthStart && p.month <= monthEnd)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    // Current year projection
+    const currentYearProjection = allProjections
+      .filter((p) => p.month >= yearStart && p.month <= yearEnd)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    // Next 12 months projections
     const monthlyProjections = [];
     for (let i = 0; i < 12; i++) {
       const monthDate = addMonths(monthStart, i);
-      const monthStartDate = startOfMonth(monthDate);
-      const monthEndDate = endOfMonth(monthDate);
+      const mStart = startOfMonth(monthDate);
+      const mEnd = endOfMonth(monthDate);
 
-      const projection = await prisma.paymentProjection.aggregate({
-        where: {
-          month: {
-            gte: monthStartDate,
-            lte: monthEndDate,
-          },
-        },
-        _sum: { amount: true },
-      });
+      const amount = allProjections
+        .filter((p) => p.month >= mStart && p.month <= mEnd)
+        .reduce((sum, p) => sum + p.amount, 0);
 
       monthlyProjections.push({
         month: format(monthDate, 'MMM yy'),
-        amount: projection._sum.amount || 0,
+        amount,
       });
     }
 
@@ -90,7 +99,6 @@ export async function GET() {
       take: 5,
     });
 
-    // Fetch supplier names
     const supplierIds = supplierBreakdown.map((s) => s.supplierId);
     const suppliers = await prisma.supplier.findMany({
       where: { id: { in: supplierIds } },
@@ -105,39 +113,22 @@ export async function GET() {
 
     // === Payment Status Calculations ===
 
-    // Get total projected payments up to current month (what should have been received)
-    const totalProjectedToDate = await prisma.paymentProjection.aggregate({
-      where: {
-        month: {
-          lte: monthEnd,
-        },
-      },
-      _sum: { amount: true },
-    });
+    // Total projected to date (dynamically calculated)
+    const projectedToDateAmount = allProjections
+      .filter((p) => p.month <= monthEnd)
+      .reduce((sum, p) => sum + p.amount, 0);
 
     // Get total actual payments received
     const totalActualReceived = await prisma.actualPayment.aggregate({
       _sum: { amount: true },
     });
 
-    const projectedToDateAmount = totalProjectedToDate._sum.amount || 0;
     const actualReceivedAmount = totalActualReceived._sum.amount || 0;
     const percentageReceived = projectedToDateAmount > 0
       ? Math.round((actualReceivedAmount / projectedToDateAmount) * 100)
       : 0;
 
-    // Get supplier payment status
-    // First, get all projections grouped by supplier
-    const projectionsWithSupplier = await prisma.paymentProjection.findMany({
-      include: {
-        contract: {
-          include: { supplier: true },
-        },
-        actualPayment: true,
-      },
-    });
-
-    // Group by supplier and calculate paid/outstanding/upcoming
+    // Supplier payment status (dynamically calculated)
     const supplierStatusMap = new Map<string, {
       supplierId: string;
       supplierName: string;
@@ -148,9 +139,8 @@ export async function GET() {
       upcomingCount: number;
     }>();
 
-    for (const projection of projectionsWithSupplier) {
-      const supplierId = projection.contract.supplierId;
-      const supplierName = projection.contract.supplier.name;
+    for (const projection of allProjections) {
+      const { supplierId, supplierName } = projection;
 
       if (!supplierStatusMap.has(supplierId)) {
         supplierStatusMap.set(supplierId, {
@@ -165,13 +155,9 @@ export async function GET() {
       }
 
       const status = supplierStatusMap.get(supplierId)!;
-      const projectionMonth = new Date(projection.month);
 
-      if (projection.actualPayment) {
-        // Has an actual payment linked
-        status.paid += projection.actualPayment.amount;
-      } else if (projectionMonth <= monthEnd) {
-        // Due but not paid (outstanding)
+      if (projection.month <= monthEnd) {
+        // Due (outstanding until matched with actual payment)
         status.outstanding += projection.amount;
         status.outstandingCount += 1;
       } else {
@@ -181,10 +167,9 @@ export async function GET() {
       }
     }
 
-    // Convert map to array and sort by outstanding (needs chasing) first
     const supplierPaymentStatus = Array.from(supplierStatusMap.values())
       .sort((a, b) => b.outstanding - a.outstanding)
-      .slice(0, 10); // Top 10 suppliers
+      .slice(0, 10);
 
     return NextResponse.json({
       totalContracts,
@@ -200,7 +185,6 @@ export async function GET() {
         contractStartDate: c.contractStartDate.toISOString(),
       })),
       supplierBreakdown: supplierBreakdownWithNames,
-      // Payment status data
       paymentStatus: {
         totalProjectedToDate: projectedToDateAmount,
         totalActualReceived: actualReceivedAmount,
