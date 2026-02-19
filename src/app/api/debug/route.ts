@@ -1,17 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { calculatePaymentProjections } from '@/lib/payment-calculator';
 import { startOfMonth } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
-  const session = await getServerSession(authOptions);
-
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
     // Get first 3 contracts with all their data
     const contracts = await prisma.contract.findMany({
@@ -21,7 +15,7 @@ export async function GET() {
 
     const results = contracts.map((contract) => {
       let projections: unknown[] = [];
-      let error: string | null = null;
+      let calcError: string | null = null;
 
       try {
         projections = calculatePaymentProjections({
@@ -37,7 +31,7 @@ export async function GET() {
           paymentType: p.paymentType,
         }));
       } catch (e) {
-        error = e instanceof Error ? e.message : String(e);
+        calcError = e instanceof Error ? e.stack || e.message : String(e);
       }
 
       return {
@@ -47,21 +41,23 @@ export async function GET() {
         contractValue: contract.contractValue,
         contractValueType: typeof contract.contractValue,
         commsUR: contract.commsUR,
-        lockInDate: contract.lockInDate,
-        contractStartDate: contract.contractStartDate,
-        contractEndDate: contract.contractEndDate,
+        lockInDate: String(contract.lockInDate),
+        lockInDateType: typeof contract.lockInDate,
+        contractStartDate: String(contract.contractStartDate),
+        contractEndDate: String(contract.contractEndDate),
         projections,
         projectionCount: projections.length,
-        error,
+        calcError,
       };
     });
 
     return NextResponse.json({
       totalContracts: await prisma.contract.count(),
+      contractsFetched: contracts.length,
       sampleContracts: results,
     });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const msg = error instanceof Error ? error.stack || error.message : String(error);
+    return NextResponse.json({ topLevelError: msg }, { status: 500 });
   }
 }
