@@ -6,6 +6,15 @@ import { calculatePaymentProjections } from '@/lib/payment-calculator';
 import { startOfMonth } from 'date-fns';
 import type { ImportContract, ImportResponse, ImportError } from '@/types/import';
 
+// Fix 2-digit years (e.g., year 26 → 2026)
+function fixDate(dateInput: string | Date): Date {
+  const date = new Date(dateInput);
+  if (date.getFullYear() < 100) {
+    date.setFullYear(date.getFullYear() + 2000);
+  }
+  return date;
+}
+
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
 
@@ -74,7 +83,7 @@ export async function POST(request: NextRequest) {
         // Create contract
         const contract = await prisma.contract.create({
           data: {
-            lockInDate: new Date(importContract.lockInDate),
+            lockInDate: fixDate(importContract.lockInDate),
             companyName: importContract.companyName,
             meterNumber: importContract.meterNumber || null,
             previousSupplier: importContract.previousSupplier || null,
@@ -82,8 +91,8 @@ export async function POST(request: NextRequest) {
             supplierId: supplier.id,
             commsSC: importContract.commsSC || 0,
             commsUR: importContract.commsUR || 0,
-            contractStartDate: new Date(importContract.contractStartDate),
-            contractEndDate: new Date(importContract.contractEndDate),
+            contractStartDate: fixDate(importContract.contractStartDate),
+            contractEndDate: fixDate(importContract.contractEndDate),
             contractValue: importContract.contractValue || 0,
             notes: null,
           },

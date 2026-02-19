@@ -1,63 +1,78 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { calculatePaymentProjections } from '@/lib/payment-calculator';
-import { startOfMonth } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
 
+// Fix dates where year < 100 (e.g., 0026 should be 2026)
+export async function POST() {
+  try {
+    const contracts = await prisma.contract.findMany();
+    let fixed = 0;
+
+    for (const contract of contracts) {
+      const updates: Record<string, Date> = {};
+
+      const lockIn = new Date(contract.lockInDate);
+      if (lockIn.getFullYear() < 100) {
+        lockIn.setFullYear(lockIn.getFullYear() + 2000);
+        updates.lockInDate = lockIn;
+      }
+
+      const csd = new Date(contract.contractStartDate);
+      if (csd.getFullYear() < 100) {
+        csd.setFullYear(csd.getFullYear() + 2000);
+        updates.contractStartDate = csd;
+      }
+
+      const ced = new Date(contract.contractEndDate);
+      if (ced.getFullYear() < 100) {
+        ced.setFullYear(ced.getFullYear() + 2000);
+        updates.contractEndDate = ced;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await prisma.contract.update({
+          where: { id: contract.id },
+          data: updates,
+        });
+        fixed++;
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      totalContracts: contracts.length,
+      fixedContracts: fixed,
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+// Show sample data for diagnosis
 export async function GET() {
   try {
-    // Get first 3 contracts with all their data
     const contracts = await prisma.contract.findMany({
       take: 3,
       include: { supplier: true },
     });
 
-    const results = contracts.map((contract) => {
-      let projections: unknown[] = [];
-      let calcError: string | null = null;
-
-      try {
-        projections = calculatePaymentProjections({
-          lockInDate: contract.lockInDate,
-          contractStartDate: contract.contractStartDate,
-          contractEndDate: contract.contractEndDate,
-          contractValue: contract.contractValue,
-          commsUR: contract.commsUR,
-          supplierName: contract.supplier.name,
-        }).map((p) => ({
-          month: startOfMonth(p.month).toISOString(),
-          amount: p.amount,
-          paymentType: p.paymentType,
-        }));
-      } catch (e) {
-        calcError = e instanceof Error ? e.stack || e.message : String(e);
-      }
-
-      return {
-        id: contract.id,
-        companyName: contract.companyName,
-        supplierName: contract.supplier.name,
-        contractValue: contract.contractValue,
-        contractValueType: typeof contract.contractValue,
-        commsUR: contract.commsUR,
-        lockInDate: String(contract.lockInDate),
-        lockInDateType: typeof contract.lockInDate,
-        contractStartDate: String(contract.contractStartDate),
-        contractEndDate: String(contract.contractEndDate),
-        projections,
-        projectionCount: projections.length,
-        calcError,
-      };
-    });
+    const results = contracts.map((contract) => ({
+      id: contract.id,
+      companyName: contract.companyName,
+      contractValue: contract.contractValue,
+      lockInYear: new Date(contract.lockInDate).getFullYear(),
+      csdYear: new Date(contract.contractStartDate).getFullYear(),
+      cedYear: new Date(contract.contractEndDate).getFullYear(),
+    }));
 
     return NextResponse.json({
       totalContracts: await prisma.contract.count(),
-      contractsFetched: contracts.length,
-      sampleContracts: results,
+      samples: results,
     });
   } catch (error) {
-    const msg = error instanceof Error ? error.stack || error.message : String(error);
-    return NextResponse.json({ topLevelError: msg }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
