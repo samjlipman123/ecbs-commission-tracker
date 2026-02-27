@@ -45,6 +45,7 @@ interface DashboardStats {
   totalContractValue: number;
   currentMonthProjection: number;
   currentYearProjection: number;
+  next12MonthsProjection: number;
   monthlyProjections: { month: string; amount: number }[];
   recentContracts: {
     id: string;
@@ -129,6 +130,7 @@ export default function DashboardPage() {
     totalContractValue: 0,
     currentMonthProjection: 0,
     currentYearProjection: 0,
+    next12MonthsProjection: 0,
     monthlyProjections: [],
     recentContracts: [],
     supplierBreakdown: [],
@@ -210,7 +212,9 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="mt-4 flex items-center text-sm">
-              <span className="text-gray-500">Projected income</span>
+              <span className="text-gray-500">
+                Next 12 months: {formatCurrency(displayStats.next12MonthsProjection)}
+              </span>
             </div>
           </div>
         </div>

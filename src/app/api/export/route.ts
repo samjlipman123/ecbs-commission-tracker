@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { calculatePaymentProjections } from '@/lib/payment-calculator';
 import { startOfMonth, endOfMonth, parseISO, format } from 'date-fns';
 
 export async function GET(request: NextRequest) {
@@ -66,24 +67,62 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Export projections
-    const where: Record<string, unknown> = {};
+    // Export projections - dynamically calculated from contracts (same as dashboard)
+    const contracts = await prisma.contract.findMany({
+      include: { supplier: true },
+    });
 
-    if (startDate && endDate) {
-      where.month = {
-        gte: startOfMonth(parseISO(startDate)),
-        lte: endOfMonth(parseISO(endDate)),
-      };
+    const filterStart = startDate ? startOfMonth(parseISO(startDate)) : null;
+    const filterEnd = endDate ? endOfMonth(parseISO(endDate)) : null;
+
+    interface ProjectionRow {
+      month: Date;
+      companyName: string;
+      supplierName: string;
+      paymentType: string;
+      amount: number;
+      contractStartDate: Date;
+      contractEndDate: Date;
+      contractValue: number;
     }
 
-    const projections = await prisma.paymentProjection.findMany({
-      where,
-      include: {
-        contract: {
-          include: { supplier: true },
-        },
-      },
-      orderBy: { month: 'asc' },
+    const allProjections: ProjectionRow[] = [];
+
+    for (const contract of contracts) {
+      const projections = calculatePaymentProjections({
+        lockInDate: contract.lockInDate,
+        contractStartDate: contract.contractStartDate,
+        contractEndDate: contract.contractEndDate,
+        contractValue: contract.contractValue,
+        commsUR: contract.commsUR,
+        supplierName: contract.supplier.name,
+      });
+
+      for (const p of projections) {
+        const projMonth = startOfMonth(p.month);
+
+        // Apply date filter
+        if (filterStart && projMonth < filterStart) continue;
+        if (filterEnd && projMonth > filterEnd) continue;
+
+        allProjections.push({
+          month: projMonth,
+          companyName: contract.companyName,
+          supplierName: contract.supplier.name,
+          paymentType: p.paymentType,
+          amount: p.amount,
+          contractStartDate: contract.contractStartDate,
+          contractEndDate: contract.contractEndDate,
+          contractValue: contract.contractValue,
+        });
+      }
+    }
+
+    // Sort by month, then company name
+    allProjections.sort((a, b) => {
+      const monthDiff = a.month.getTime() - b.month.getTime();
+      if (monthDiff !== 0) return monthDiff;
+      return a.companyName.localeCompare(b.companyName);
     });
 
     const csvHeaders = [
@@ -97,15 +136,15 @@ export async function GET(request: NextRequest) {
       'Contract Value',
     ];
 
-    const csvRows = projections.map((p) => [
+    const csvRows = allProjections.map((p) => [
       format(p.month, 'MMM yyyy'),
-      p.contract.companyName,
-      p.contract.supplier.name,
+      p.companyName,
+      p.supplierName,
       p.paymentType,
       p.amount.toFixed(2),
-      format(p.contract.contractStartDate, 'dd/MM/yyyy'),
-      format(p.contract.contractEndDate, 'dd/MM/yyyy'),
-      p.contract.contractValue.toFixed(2),
+      format(p.contractStartDate, 'dd/MM/yyyy'),
+      format(p.contractEndDate, 'dd/MM/yyyy'),
+      p.contractValue.toFixed(2),
     ]);
 
     const csv = [csvHeaders, ...csvRows]

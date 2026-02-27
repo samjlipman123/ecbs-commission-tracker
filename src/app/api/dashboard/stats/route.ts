@@ -62,9 +62,15 @@ export async function GET() {
       .filter((p) => p.month >= monthStart && p.month <= monthEnd)
       .reduce((sum, p) => sum + p.amount, 0);
 
-    // Current year projection
+    // Current year projection (calendar year: Jan-Dec)
     const currentYearProjection = allProjections
       .filter((p) => p.month >= yearStart && p.month <= yearEnd)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    // Next 12 months projection (from current month forward)
+    const next12MonthEnd = endOfMonth(addMonths(monthStart, 11));
+    const next12MonthsProjection = allProjections
+      .filter((p) => p.month >= monthStart && p.month <= next12MonthEnd)
       .reduce((sum, p) => sum + p.amount, 0);
 
     // Next 12 months projections
@@ -176,6 +182,7 @@ export async function GET() {
       totalContractValue,
       currentMonthProjection,
       currentYearProjection,
+      next12MonthsProjection,
       monthlyProjections,
       recentContracts: recentContracts.map((c) => ({
         id: c.id,
