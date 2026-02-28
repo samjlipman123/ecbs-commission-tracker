@@ -68,6 +68,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [seedMessage, setSeedMessage] = useState('');
+  const [brushKey, setBrushKey] = useState(0);
 
   useEffect(() => {
     fetchDashboardStats();
@@ -228,9 +229,17 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Monthly Projections Chart */}
           <div className="card">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Monthly Projections
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Monthly Projections
+              </h3>
+              <button
+                onClick={() => setBrushKey((k) => k + 1)}
+                className="text-xs text-[var(--ecbs-teal)] hover:underline"
+              >
+                Reset view
+              </button>
+            </div>
             {displayStats.monthlyProjections.length > 0 ? (
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
@@ -276,6 +285,7 @@ export default function DashboardPage() {
                       dot={{ fill: '#0d9488', strokeWidth: 2 }}
                     />
                     <Brush
+                      key={brushKey}
                       dataKey="month"
                       height={30}
                       stroke="#0d9488"
