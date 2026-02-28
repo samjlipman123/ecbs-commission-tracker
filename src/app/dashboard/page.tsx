@@ -20,9 +20,11 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  Cell,
+  LineChart,
+  Line,
   Brush,
   ReferenceLine,
+  ReferenceArea,
 } from 'recharts';
 
 interface PaymentStatus {
@@ -232,7 +234,7 @@ export default function DashboardPage() {
             {displayStats.monthlyProjections.length > 0 ? (
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={displayStats.monthlyProjections}>
+                  <LineChart data={displayStats.monthlyProjections}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
                     <YAxis
@@ -252,20 +254,27 @@ export default function DashboardPage() {
                         borderRadius: '8px',
                       }}
                     />
+                    {displayStats.monthlyProjections.length > 0 && displayStats.currentMonthIndex > 0 && (
+                      <ReferenceArea
+                        x1={displayStats.monthlyProjections[0]?.month}
+                        x2={displayStats.monthlyProjections[displayStats.currentMonthIndex - 1]?.month}
+                        fill="#94a3b8"
+                        fillOpacity={0.15}
+                      />
+                    )}
                     <ReferenceLine
                       x={displayStats.monthlyProjections[displayStats.currentMonthIndex]?.month}
                       stroke="#6b7280"
                       strokeDasharray="3 3"
                       label={{ value: 'Now', position: 'top', fontSize: 11, fill: '#6b7280' }}
                     />
-                    <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
-                      {displayStats.monthlyProjections.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={entry.isPast ? '#94a3b8' : '#0d9488'}
-                        />
-                      ))}
-                    </Bar>
+                    <Line
+                      type="monotone"
+                      dataKey="amount"
+                      stroke="#0d9488"
+                      strokeWidth={2}
+                      dot={{ fill: '#0d9488', strokeWidth: 2 }}
+                    />
                     <Brush
                       dataKey="month"
                       height={30}
@@ -276,7 +285,7 @@ export default function DashboardPage() {
                         displayStats.monthlyProjections.length - 1
                       )}
                     />
-                  </BarChart>
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             ) : (
