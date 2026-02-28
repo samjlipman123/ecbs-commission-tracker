@@ -13,8 +13,6 @@ import {
   ArrowDownRight,
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -22,6 +20,9 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  Cell,
+  Brush,
+  ReferenceLine,
 } from 'recharts';
 
 interface PaymentStatus {
@@ -46,7 +47,8 @@ interface DashboardStats {
   currentMonthProjection: number;
   currentYearProjection: number;
   next12MonthsProjection: number;
-  monthlyProjections: { month: string; amount: number }[];
+  monthlyProjections: { month: string; amount: number; isPast: boolean }[];
+  currentMonthIndex: number;
   recentContracts: {
     id: string;
     companyName: string;
@@ -132,6 +134,7 @@ export default function DashboardPage() {
     currentYearProjection: 0,
     next12MonthsProjection: 0,
     monthlyProjections: [],
+    currentMonthIndex: 0,
     recentContracts: [],
     supplierBreakdown: [],
   };
@@ -224,12 +227,12 @@ export default function DashboardPage() {
           {/* Monthly Projections Chart */}
           <div className="card">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Monthly Projections (Next 12 Months)
+              Monthly Projections
             </h3>
             {displayStats.monthlyProjections.length > 0 ? (
-              <div className="h-64">
+              <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={displayStats.monthlyProjections}>
+                  <BarChart data={displayStats.monthlyProjections}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
                     <YAxis
@@ -238,7 +241,10 @@ export default function DashboardPage() {
                       tickFormatter={(value) => `£${(value / 1000).toFixed(0)}k`}
                     />
                     <Tooltip
-                      formatter={(value) => [formatCurrency(Number(value)), 'Projected']}
+                      formatter={(value, _name, props) => [
+                        formatCurrency(Number(value)),
+                        (props as { payload: { isPast: boolean } }).payload.isPast ? 'Past' : 'Projected',
+                      ]}
                       labelStyle={{ color: '#374151' }}
                       contentStyle={{
                         backgroundColor: '#fff',
@@ -246,18 +252,35 @@ export default function DashboardPage() {
                         borderRadius: '8px',
                       }}
                     />
-                    <Line
-                      type="monotone"
-                      dataKey="amount"
-                      stroke="#0d9488"
-                      strokeWidth={2}
-                      dot={{ fill: '#0d9488', strokeWidth: 2 }}
+                    <ReferenceLine
+                      x={displayStats.monthlyProjections[displayStats.currentMonthIndex]?.month}
+                      stroke="#6b7280"
+                      strokeDasharray="3 3"
+                      label={{ value: 'Now', position: 'top', fontSize: 11, fill: '#6b7280' }}
                     />
-                  </LineChart>
+                    <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                      {displayStats.monthlyProjections.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={entry.isPast ? '#94a3b8' : '#0d9488'}
+                        />
+                      ))}
+                    </Bar>
+                    <Brush
+                      dataKey="month"
+                      height={30}
+                      stroke="#0d9488"
+                      startIndex={displayStats.currentMonthIndex}
+                      endIndex={Math.min(
+                        displayStats.currentMonthIndex + 11,
+                        displayStats.monthlyProjections.length - 1
+                      )}
+                    />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-64 flex items-center justify-center text-gray-500">
+              <div className="h-80 flex items-center justify-center text-gray-500">
                 <p>No projection data available. Add contracts to see projections.</p>
               </div>
             )}

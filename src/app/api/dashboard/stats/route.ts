@@ -73,9 +73,11 @@ export async function GET() {
       .filter((p) => p.month >= monthStart && p.month <= next12MonthEnd)
       .reduce((sum, p) => sum + p.amount, 0);
 
-    // Next 12 months projections
+    // Monthly projections: 12 past + 12 future (24 months total)
+    const PAST_MONTHS = 12;
+    const FUTURE_MONTHS = 12;
     const monthlyProjections = [];
-    for (let i = 0; i < 12; i++) {
+    for (let i = -PAST_MONTHS; i < FUTURE_MONTHS; i++) {
       const monthDate = addMonths(monthStart, i);
       const mStart = startOfMonth(monthDate);
       const mEnd = endOfMonth(monthDate);
@@ -87,8 +89,10 @@ export async function GET() {
       monthlyProjections.push({
         month: format(monthDate, 'MMM yy'),
         amount,
+        isPast: i < 0,
       });
     }
+    const currentMonthIndex = PAST_MONTHS;
 
     // Get recent contracts
     const recentContracts = await prisma.contract.findMany({
@@ -184,6 +188,7 @@ export async function GET() {
       currentYearProjection,
       next12MonthsProjection,
       monthlyProjections,
+      currentMonthIndex,
       recentContracts: recentContracts.map((c) => ({
         id: c.id,
         companyName: c.companyName,
