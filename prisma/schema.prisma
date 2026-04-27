@@ -58,14 +58,16 @@ model VerificationToken {
 
 // Business Models
 model Supplier {
-  id           String     @id @default(cuid())
-  name         String     @unique
-  paymentTerms String // JSON string with payment rules
-  upliftCap    Float?     // Maximum uplift rate (p/kWh)
-  isActive     Boolean    @default(true)
-  contracts    Contract[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id                String     @id @default(cuid())
+  name              String     @unique
+  paymentTerms      String // JSON string with payment rules
+  upliftCap         Float?     // Default cap (p/kWh) used when no per-fuel override is set
+  upliftCapElectric Float?     // Override cap for Electric/Power contracts
+  upliftCapGas      Float?     // Override cap for Gas contracts
+  isActive          Boolean    @default(true)
+  contracts         Contract[]
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 }
 
 model Contract {

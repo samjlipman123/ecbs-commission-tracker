@@ -9,6 +9,8 @@ interface Supplier {
   name: string;
   paymentTerms: string;
   upliftCap: number | null;
+  upliftCapElectric: number | null;
+  upliftCapGas: number | null;
   isActive: boolean;
 }
 
@@ -161,6 +163,9 @@ export default function SuppliersPage() {
     preset: 'standard_80_20_live',
     paymentTerms: presets.standard_80_20_live.terms,
     upliftCap: '',
+    upliftCapElectric: '',
+    upliftCapGas: '',
+    differentPerFuel: false,
     hasConditionalRules: false,
     conditionalRules: [] as ConditionalRule[]
   });
@@ -334,12 +339,17 @@ export default function SuppliersPage() {
     setSaving(true);
 
     try {
+      const parseCap = (v: string) => (v.trim() === '' ? null : parseFloat(v));
+      const upliftCap = formData.differentPerFuel ? null : parseCap(formData.upliftCap);
+      const upliftCapElectric = formData.differentPerFuel ? parseCap(formData.upliftCapElectric) : null;
+      const upliftCapGas = formData.differentPerFuel ? parseCap(formData.upliftCapGas) : null;
+
       const description = generateDescription(formData.paymentTerms.defaultPayments);
       const termsWithDescription: StructuredPaymentTerms = {
         ...formData.paymentTerms,
         description,
         conditionalRules: formData.conditionalRules.length > 0 ? formData.conditionalRules : undefined,
-        upliftCap: formData.upliftCap ? parseFloat(formData.upliftCap) : undefined
+        upliftCap: upliftCap ?? undefined
       };
 
       const response = await fetch(editingSupplier ? `/api/suppliers/${editingSupplier}` : '/api/suppliers', {
@@ -348,7 +358,9 @@ export default function SuppliersPage() {
         body: JSON.stringify({
           name: formData.name,
           paymentTerms: JSON.stringify(termsWithDescription),
-          upliftCap: formData.upliftCap ? parseFloat(formData.upliftCap) : null
+          upliftCap,
+          upliftCapElectric,
+          upliftCapGas
         })
       });
 
@@ -372,6 +384,9 @@ export default function SuppliersPage() {
       preset: 'standard_80_20_live',
       paymentTerms: JSON.parse(JSON.stringify(presets.standard_80_20_live.terms)),
       upliftCap: '',
+      upliftCapElectric: '',
+      upliftCapGas: '',
+      differentPerFuel: false,
       hasConditionalRules: false,
       conditionalRules: []
     });
@@ -392,11 +407,17 @@ export default function SuppliersPage() {
       parsedTerms = JSON.parse(JSON.stringify(presets.standard_80_20_live.terms));
     }
 
+    const hasPerFuel =
+      supplier.upliftCapElectric != null || supplier.upliftCapGas != null;
+
     setFormData({
       name: supplier.name,
       preset: 'custom',
       paymentTerms: parsedTerms,
-      upliftCap: supplier.upliftCap?.toString() || '',
+      upliftCap: hasPerFuel ? '' : supplier.upliftCap?.toString() || '',
+      upliftCapElectric: supplier.upliftCapElectric?.toString() || '',
+      upliftCapGas: supplier.upliftCapGas?.toString() || '',
+      differentPerFuel: hasPerFuel,
       hasConditionalRules: conditionalRules.length > 0,
       conditionalRules
     });
@@ -779,16 +800,57 @@ export default function SuppliersPage() {
 
               {/* Uplift Cap */}
               <div>
-                <label className="label">Uplift Cap (p/kWh)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.upliftCap}
-                  onChange={(e) => setFormData(prev => ({ ...prev, upliftCap: e.target.value }))}
-                  className="input w-48"
-                  placeholder="e.g., 1.5"
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="label mb-0">Uplift Cap (p/kWh)</label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.differentPerFuel}
+                      onChange={(e) => setFormData(prev => ({ ...prev, differentPerFuel: e.target.checked }))}
+                      className="h-4 w-4 rounded border-gray-300 text-[var(--ecbs-teal)] focus:ring-[var(--ecbs-teal)]"
+                    />
+                    Different cap per fuel type
+                  </label>
+                </div>
+
+                {!formData.differentPerFuel ? (
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.upliftCap}
+                    onChange={(e) => setFormData(prev => ({ ...prev, upliftCap: e.target.value }))}
+                    className="input w-48"
+                    placeholder="e.g., 1.5"
+                  />
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
+                    <div>
+                      <label className="text-xs text-gray-600">Power (Electric)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.upliftCapElectric}
+                        onChange={(e) => setFormData(prev => ({ ...prev, upliftCapElectric: e.target.value }))}
+                        className="input"
+                        placeholder="e.g., 4"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600">Gas</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.upliftCapGas}
+                        onChange={(e) => setFormData(prev => ({ ...prev, upliftCapGas: e.target.value }))}
+                        className="input"
+                        placeholder="e.g., 3"
+                      />
+                    </div>
+                  </div>
+                )}
                 <p className="text-xs text-gray-500 mt-1">
                   Leave blank if no cap. Amounts over cap are paid in monthly arrears.
                 </p>
@@ -867,11 +929,24 @@ export default function SuppliersPage() {
                             Inactive
                           </span>
                         )}
-                        {supplier.upliftCap && (
+                        {(supplier.upliftCapElectric != null || supplier.upliftCapGas != null) ? (
+                          <>
+                            {supplier.upliftCapElectric != null && (
+                              <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">
+                                Power cap: {supplier.upliftCapElectric}p/kWh
+                              </span>
+                            )}
+                            {supplier.upliftCapGas != null && (
+                              <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">
+                                Gas cap: {supplier.upliftCapGas}p/kWh
+                              </span>
+                            )}
+                          </>
+                        ) : supplier.upliftCap != null ? (
                           <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">
                             Cap: {supplier.upliftCap}p/kWh
                           </span>
-                        )}
+                        ) : null}
                       </div>
                       <p className="text-sm text-gray-500 mt-1">
                         {formatPaymentTermsDisplay(supplier.paymentTerms)}

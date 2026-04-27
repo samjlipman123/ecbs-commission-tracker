@@ -2,7 +2,15 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
-const suppliers = [
+type SupplierSeed = {
+  name: string;
+  paymentTerms: string;
+  upliftCap?: number;
+  upliftCapElectric?: number;
+  upliftCapGas?: number;
+};
+
+const suppliers: SupplierSeed[] = [
   { name: 'British Gas', paymentTerms: '70% on live (month after CSD), 30% reconciliation 2 months after CED' },
   { name: 'British Gas Renewals', paymentTerms: '70% on signature (month after lock-in), 30% reconciliation 2 months after CED' },
   { name: 'British Gas Lite', paymentTerms: '70% on live (month after CSD), 30% reconciliation 2 months after CED' },
@@ -67,7 +75,9 @@ export async function GET() {
         data: {
           name: supplier.name,
           paymentTerms: supplier.paymentTerms,
-          upliftCap: supplier.upliftCap || null,
+          upliftCap: supplier.upliftCap ?? null,
+          upliftCapElectric: supplier.upliftCapElectric ?? null,
+          upliftCapGas: supplier.upliftCapGas ?? null,
         },
       });
     }

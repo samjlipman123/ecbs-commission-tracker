@@ -2,7 +2,15 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
-const suppliers = [
+type SupplierSeed = {
+  name: string;
+  paymentTerms: string;
+  upliftCap?: number;
+  upliftCapElectric?: number;
+  upliftCapGas?: number;
+};
+
+const suppliers: SupplierSeed[] = [
   { name: 'Airticity Acquisition', paymentTerms: '80% on live, 20% 2 months after CED' },
   { name: 'Airticity Renewal', paymentTerms: '80% on live, 20% 2 months after CED' },
   { name: 'British Gas Acquisition', paymentTerms: '70% on live (month after CSD), 30% reconciliation 2 months after CED' },
@@ -12,9 +20,9 @@ const suppliers = [
   { name: 'Brook Green Renewal No Upfront', paymentTerms: '80% on live, 20% reconciliation. Anything over 1.5p/kWh paid monthly in arrears', upliftCap: 1.5 },
   { name: 'Brook Green Renewal Upfront', paymentTerms: '80% on live, 20% reconciliation. Anything over 1.5p/kWh paid monthly in arrears', upliftCap: 1.5 },
   { name: 'Corona Acquisition No Upfront', paymentTerms: '80% signature, 20% reconciliation 2 months after CED' },
-  { name: 'Corona Acquisition Upfront', paymentTerms: '80% signature (18 months before CSD if >18 months out), 4p power/3p gas cap, >6yr in arrears. 20% reconciliation 2 months after CED' },
+  { name: 'Corona Acquisition Upfront', paymentTerms: '80% signature (18 months before CSD if >18 months out), 4p power/3p gas cap, >6yr in arrears. 20% reconciliation 2 months after CED', upliftCapElectric: 4, upliftCapGas: 3 },
   { name: 'Corona Renewal No Upfront', paymentTerms: '80% signature, 20% reconciliation 2 months after CED' },
-  { name: 'Corona Renewal Upfront', paymentTerms: '80% signature (18 months before CSD if >18 months out), 4p power/3p gas cap, >6yr in arrears. 20% reconciliation 2 months after CED' },
+  { name: 'Corona Renewal Upfront', paymentTerms: '80% signature (18 months before CSD if >18 months out), 4p power/3p gas cap, >6yr in arrears. 20% reconciliation 2 months after CED', upliftCapElectric: 4, upliftCapGas: 3 },
   { name: 'Crown Gas & Power Acquisition No Upfront', paymentTerms: '80% live up to 36 months, longer contracts reconciled at 36 months then remainder paid 80%' },
   { name: 'Crown Gas & Power Acquisition Upfront', paymentTerms: '80% live up to 36 months, longer contracts reconciled at 36 months then remainder paid 80%' },
   { name: 'Crown Gas & Power Renewal No Upfront', paymentTerms: '80% live up to 36 months, longer contracts reconciled at 36 months then remainder paid 80%' },
@@ -105,12 +113,16 @@ export async function POST() {
         where: { name: supplier.name },
         update: {
           paymentTerms: supplier.paymentTerms,
-          upliftCap: supplier.upliftCap || null,
+          upliftCap: supplier.upliftCap ?? null,
+          upliftCapElectric: supplier.upliftCapElectric ?? null,
+          upliftCapGas: supplier.upliftCapGas ?? null,
         },
         create: {
           name: supplier.name,
           paymentTerms: supplier.paymentTerms,
-          upliftCap: supplier.upliftCap || null,
+          upliftCap: supplier.upliftCap ?? null,
+          upliftCapElectric: supplier.upliftCapElectric ?? null,
+          upliftCapGas: supplier.upliftCapGas ?? null,
         },
       });
       supplierCount++;

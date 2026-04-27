@@ -36,17 +36,25 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const { name, paymentTerms, upliftCap } = body;
+    const { name, paymentTerms, upliftCap, upliftCapElectric, upliftCapGas } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
+    const toFloat = (v: unknown): number | null => {
+      if (v === null || v === undefined || v === '') return null;
+      const parsed = parseFloat(String(v));
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
     const supplier = await prisma.supplier.create({
       data: {
         name,
         paymentTerms: paymentTerms || '',
-        upliftCap: upliftCap ? parseFloat(upliftCap) : null,
+        upliftCap: toFloat(upliftCap),
+        upliftCapElectric: toFloat(upliftCapElectric),
+        upliftCapGas: toFloat(upliftCapGas),
       },
     });
 

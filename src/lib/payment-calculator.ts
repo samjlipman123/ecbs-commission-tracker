@@ -7,6 +7,10 @@ export interface ContractData {
   contractValue: number;
   commsUR: number;         // Uplift rate p/kWh
   supplierName: string;
+  energyType?: string;             // "Electric" | "Gas"
+  upliftCap?: number | null;       // Default cap from supplier
+  upliftCapElectric?: number | null;
+  upliftCapGas?: number | null;
 }
 
 export interface PaymentProjection {
@@ -23,6 +27,39 @@ function sameMonth(date1: Date, date2: Date): boolean {
 // Get end of month for a date
 function getEndOfMonth(date: Date): Date {
   return endOfMonth(date);
+}
+
+// Resolve the uplift cap that applies to this contract, given fuel type.
+// Per-fuel overrides win over the default cap; null means "no cap".
+function resolveUpliftCap(contract: ContractData): number | null {
+  const fuel = (contract.energyType || '').toLowerCase();
+  if (fuel === 'gas' && contract.upliftCapGas != null) return contract.upliftCapGas;
+  if (fuel !== 'gas' && contract.upliftCapElectric != null) return contract.upliftCapElectric;
+  return contract.upliftCap ?? null;
+}
+
+// Spread an arrears total across the months from CSD to CED inclusive.
+function spreadArrears(
+  arrearsValue: number,
+  contractStartDate: Date,
+  contractEndDate: Date
+): PaymentProjection[] {
+  const projections: PaymentProjection[] = [];
+  const monthsInContract = differenceInMonths(contractEndDate, contractStartDate) + 1;
+  if (monthsInContract <= 0 || arrearsValue <= 0) return projections;
+  const monthlyArrears = arrearsValue / monthsInContract;
+
+  let currentMonth = startOfMonth(addMonths(contractStartDate, 1));
+  const endMonth = startOfMonth(addMonths(contractEndDate, 1));
+  while (currentMonth <= endMonth) {
+    projections.push({
+      month: new Date(currentMonth),
+      amount: monthlyArrears,
+      paymentType: 'arrears',
+    });
+    currentMonth = addMonths(currentMonth, 1);
+  }
+  return projections;
 }
 
 // Calculate payments for British Gas (Acquisition)
@@ -76,13 +113,13 @@ function calculateBritishGasRenewals(contract: ContractData): PaymentProjection[
 }
 
 // Calculate payments for Brook Green Supply
-// 80% on live, 20% reconciliation. Anything over 1.5p/kWh paid monthly in arrears
+// 80% on live, 20% reconciliation. Anything over the supplier's cap paid monthly in arrears
 function calculateBrookGreenSupply(contract: ContractData): PaymentProjection[] {
   const projections: PaymentProjection[] = [];
   const { contractStartDate, contractEndDate, contractValue, commsUR } = contract;
-  const UPLIFT_CAP = 1.5;
+  const cap = resolveUpliftCap(contract);
 
-  if (commsUR <= UPLIFT_CAP) {
+  if (cap == null || commsUR <= cap) {
     // Standard 80/20 split
     const liveMonth = startOfMonth(addMonths(contractStartDate, 1));
     projections.push({
@@ -98,11 +135,10 @@ function calculateBrookGreenSupply(contract: ContractData): PaymentProjection[] 
       paymentType: 'reconciliation'
     });
   } else {
-    // Over cap - spread payments monthly in arrears
-    const cappedValue = contractValue * (UPLIFT_CAP / commsUR);
+    // Over cap - capped portion follows 80/20, overage spread monthly in arrears
+    const cappedValue = contractValue * (cap / commsUR);
     const arrearsValue = contractValue - cappedValue;
 
-    // 80% of capped value on live
     const liveMonth = startOfMonth(addMonths(contractStartDate, 1));
     projections.push({
       month: liveMonth,
@@ -110,7 +146,6 @@ function calculateBrookGreenSupply(contract: ContractData): PaymentProjection[] 
       paymentType: 'live'
     });
 
-    // 20% of capped value on reconciliation
     const reconciliationMonth = startOfMonth(addMonths(contractEndDate, 2));
     projections.push({
       month: reconciliationMonth,
@@ -118,59 +153,49 @@ function calculateBrookGreenSupply(contract: ContractData): PaymentProjection[] 
       paymentType: 'reconciliation'
     });
 
-    // Arrears spread monthly from CSD to CED
-    const monthsInContract = differenceInMonths(contractEndDate, contractStartDate) + 1;
-    const monthlyArrears = arrearsValue / monthsInContract;
-
-    let currentMonth = startOfMonth(addMonths(contractStartDate, 1));
-    const endMonth = startOfMonth(addMonths(contractEndDate, 1));
-
-    while (currentMonth <= endMonth) {
-      projections.push({
-        month: new Date(currentMonth),
-        amount: monthlyArrears,
-        paymentType: 'arrears'
-      });
-      currentMonth = addMonths(currentMonth, 1);
-    }
+    projections.push(...spreadArrears(arrearsValue, contractStartDate, contractEndDate));
   }
 
   return projections;
 }
 
 // Calculate payments for Corona Upfront
-// 80% signature (18 months before CSD if >18 months out), 4p power/3p gas cap,
-// >6yr in arrears. 20% reconciliation 2 months after CED
+// 80% signature (18 months before CSD if >18 months out), 20% reconciliation 2 months after CED.
+// Per-fuel uplift caps (typically 4p power / 3p gas) — overage spread monthly in arrears.
 function calculateCoronaUpfront(contract: ContractData): PaymentProjection[] {
   const projections: PaymentProjection[] = [];
-  const { lockInDate, contractStartDate, contractEndDate, contractValue } = contract;
+  const { lockInDate, contractStartDate, contractEndDate, contractValue, commsUR } = contract;
+
+  const cap = resolveUpliftCap(contract);
+  const cappedValue =
+    cap == null || commsUR <= cap ? contractValue : contractValue * (cap / commsUR);
+  const arrearsValue = contractValue - cappedValue;
 
   const monthsToStart = differenceInMonths(contractStartDate, lockInDate);
+  const signatureMonth =
+    monthsToStart > 18
+      ? startOfMonth(addMonths(contractStartDate, -18))
+      : startOfMonth(addMonths(lockInDate, 1));
 
-  // Determine signature payment date
-  let signatureMonth: Date;
-  if (monthsToStart > 18) {
-    // Pay 18 months before CSD
-    signatureMonth = startOfMonth(addMonths(contractStartDate, -18));
-  } else {
-    // Pay month after lock-in
-    signatureMonth = startOfMonth(addMonths(lockInDate, 1));
-  }
-
-  // 80% signature
+  // 80% signature on the capped portion
   projections.push({
     month: signatureMonth,
-    amount: contractValue * 0.8,
+    amount: cappedValue * 0.8,
     paymentType: 'signature'
   });
 
-  // 20% reconciliation 2 months after CED
+  // 20% reconciliation 2 months after CED on the capped portion
   const reconciliationMonth = startOfMonth(addMonths(contractEndDate, 2));
   projections.push({
     month: reconciliationMonth,
-    amount: contractValue * 0.2,
+    amount: cappedValue * 0.2,
     paymentType: 'reconciliation'
   });
+
+  // Anything over cap spread monthly in arrears across the contract term
+  if (arrearsValue > 0) {
+    projections.push(...spreadArrears(arrearsValue, contractStartDate, contractEndDate));
+  }
 
   return projections;
 }
