@@ -40,6 +40,9 @@ export default function ContractsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [contractToDelete, setContractToDelete] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     fetchSuppliers();
@@ -76,6 +79,16 @@ export default function ContractsPage() {
       if (response.ok && data.contracts && data.pagination) {
         setContracts(data.contracts);
         setTotalPages(data.pagination.totalPages);
+        setSelectedIds((prev) => {
+          const existing = new Set<string>();
+          const visibleIds = new Set<string>(
+            (data.contracts as Contract[]).map((c) => c.id)
+          );
+          prev.forEach((id) => {
+            if (visibleIds.has(id)) existing.add(id);
+          });
+          return existing;
+        });
       }
     } catch (error) {
       console.error('Failed to fetch contracts:', error);
@@ -96,6 +109,60 @@ export default function ContractsPage() {
       console.error('Failed to delete contract:', error);
     }
   };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+
+    setBulkDeleting(true);
+    try {
+      const response = await fetch('/api/contracts/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      if (!response.ok) {
+        throw new Error('Bulk delete failed');
+      }
+      setSelectedIds(new Set());
+      setBulkDeleteModalOpen(false);
+      fetchContracts();
+    } catch (error) {
+      console.error('Failed to bulk delete contracts:', error);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const allSelected = contracts.length > 0 && contracts.every((c) => prev.has(c.id));
+      if (allSelected) {
+        const next = new Set(prev);
+        contracts.forEach((c) => next.delete(c.id));
+        return next;
+      }
+      const next = new Set(prev);
+      contracts.forEach((c) => next.add(c.id));
+      return next;
+    });
+  };
+
+  const allVisibleSelected =
+    contracts.length > 0 && contracts.every((c) => selectedIds.has(c.id));
+  const someVisibleSelected =
+    !allVisibleSelected && contracts.some((c) => selectedIds.has(c.id));
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-GB', {
@@ -158,6 +225,33 @@ export default function ContractsPage() {
           </div>
         </div>
 
+        {/* Bulk actions */}
+        {selectedIds.size > 0 && (
+          <div className="card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border border-[var(--ecbs-teal)]/40 bg-teal-50/40">
+            <div className="text-sm text-gray-700">
+              <span className="font-medium">{selectedIds.size}</span>{' '}
+              {selectedIds.size === 1 ? 'contract' : 'contracts'} selected
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                className="btn-outline"
+              >
+                Clear selection
+              </button>
+              <button
+                type="button"
+                onClick={() => setBulkDeleteModalOpen(true)}
+                className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete selected
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Table */}
         <div className="card p-0">
           {loading ? (
@@ -170,6 +264,18 @@ export default function ContractsPage() {
                 <table>
                   <thead>
                     <tr>
+                      <th className="w-10">
+                        <input
+                          type="checkbox"
+                          aria-label="Select all contracts on this page"
+                          checked={allVisibleSelected}
+                          ref={(el) => {
+                            if (el) el.indeterminate = someVisibleSelected;
+                          }}
+                          onChange={toggleSelectAll}
+                          className="h-4 w-4 rounded border-gray-300 text-[var(--ecbs-teal)] focus:ring-[var(--ecbs-teal)] cursor-pointer"
+                        />
+                      </th>
                       <th>Company</th>
                       <th>Supplier</th>
                       <th>Energy</th>
@@ -182,7 +288,19 @@ export default function ContractsPage() {
                   </thead>
                   <tbody>
                     {contracts.map((contract) => (
-                      <tr key={contract.id}>
+                      <tr
+                        key={contract.id}
+                        className={selectedIds.has(contract.id) ? 'bg-teal-50/40' : undefined}
+                      >
+                        <td>
+                          <input
+                            type="checkbox"
+                            aria-label={`Select contract for ${contract.companyName}`}
+                            checked={selectedIds.has(contract.id)}
+                            onChange={() => toggleSelected(contract.id)}
+                            className="h-4 w-4 rounded border-gray-300 text-[var(--ecbs-teal)] focus:ring-[var(--ecbs-teal)] cursor-pointer"
+                          />
+                        </td>
                         <td>
                           <div>
                             <div className="font-medium">{contract.companyName}</div>
@@ -315,6 +433,37 @@ export default function ContractsPage() {
                 className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {bulkDeleteModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Delete {selectedIds.size} {selectedIds.size === 1 ? 'Contract' : 'Contracts'}
+            </h3>
+            <p className="text-gray-500 mb-6">
+              Are you sure you want to delete {selectedIds.size === 1 ? 'this contract' : `these ${selectedIds.size} contracts`}?
+              This action cannot be undone and will also delete all associated payment projections.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setBulkDeleteModalOpen(false)}
+                disabled={bulkDeleting}
+                className="btn-outline disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {bulkDeleting ? 'Deleting…' : 'Delete'}
               </button>
             </div>
           </div>
