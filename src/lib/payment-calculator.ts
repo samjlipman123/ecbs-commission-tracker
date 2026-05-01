@@ -14,7 +14,18 @@ export interface ContractData {
   paymentTermsJson?: string | null;         // StructuredPaymentTerms JSON; falls back to legacy dispatch if absent/unparseable
   paymentTermsJsonElectric?: string | null; // Override for Electric/Power contracts; wins over paymentTermsJson when set
   paymentTermsJsonGas?: string | null;      // Override for Gas contracts; wins over paymentTermsJson when set
+  commsSC?: number;                         // Standing charge commission (p/day); used by conditional rules
 }
+
+// Conditions that conditional rules can match against. All resolve to a number drawn
+// from the contract itself (HubSpot-style — the "deal" properties).
+type RuleCondition =
+  | 'months_to_csd'
+  | 'contract_length'
+  | 'comms_ur'
+  | 'comms_sc'
+  | 'contract_value'
+  | 'annual_consumption';
 
 export interface PaymentProjection {
   month: Date;
@@ -32,7 +43,7 @@ type PaymentSplit = {
 };
 
 type ConditionalRule = {
-  condition: 'months_to_csd' | 'contract_length';
+  condition: RuleCondition;
   operator: 'lte' | 'gt';
   value: number;
   payments: PaymentSplit[];
@@ -590,18 +601,46 @@ function parseStructuredTerms(json: string | null | undefined): StructuredPaymen
   return null;
 }
 
+// Resolve the numeric value the rule should be compared against, drawn from the contract.
+// Returns null when the value can't be computed (e.g. division by zero on annual consumption).
+function resolveConditionValue(contract: ContractData, condition: RuleCondition): number | null {
+  switch (condition) {
+    case 'months_to_csd':
+      return differenceInMonths(contract.contractStartDate, contract.lockInDate);
+    case 'contract_length':
+      return differenceInMonths(contract.contractEndDate, contract.contractStartDate);
+    case 'comms_ur':
+      return contract.commsUR;
+    case 'comms_sc':
+      return contract.commsSC ?? 0;
+    case 'contract_value':
+      return contract.contractValue;
+    case 'annual_consumption': {
+      // Approximate annual kWh from the unit-rate component of the commission.
+      // Ignores standing-charge commission. If precision matters, add an
+      // explicit annualConsumption field on the contract.
+      const years = differenceInMonths(contract.contractEndDate, contract.contractStartDate) / 12;
+      if (contract.commsUR <= 0 || years <= 0) return null;
+      return (contract.contractValue * 100) / contract.commsUR / years;
+    }
+    default:
+      return null;
+  }
+}
+
+function matchesRule(contract: ContractData, rule: ConditionalRule): boolean {
+  const actual = resolveConditionValue(contract, rule.condition);
+  if (actual == null) return false;
+  return rule.operator === 'lte' ? actual <= rule.value : actual > rule.value;
+}
+
 function pickActivePayments(
   contract: ContractData,
   terms: StructuredPaymentTerms
 ): PaymentSplit[] {
   if (!terms.conditionalRules) return terms.defaultPayments;
   for (const rule of terms.conditionalRules) {
-    const actual =
-      rule.condition === 'months_to_csd'
-        ? differenceInMonths(contract.contractStartDate, contract.lockInDate)
-        : differenceInMonths(contract.contractEndDate, contract.contractStartDate);
-    const matches = rule.operator === 'lte' ? actual <= rule.value : actual > rule.value;
-    if (matches) return rule.payments;
+    if (matchesRule(contract, rule)) return rule.payments;
   }
   return terms.defaultPayments;
 }

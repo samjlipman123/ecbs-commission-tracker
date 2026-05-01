@@ -26,12 +26,31 @@ interface PaymentSplit {
   paymentType: 'signature' | 'live' | 'reconciliation' | 'arrears';
 }
 
+type RuleCondition =
+  | 'months_to_csd'
+  | 'contract_length'
+  | 'comms_ur'
+  | 'comms_sc'
+  | 'contract_value'
+  | 'annual_consumption';
+
 interface ConditionalRule {
-  condition: 'months_to_csd' | 'contract_length';
+  condition: RuleCondition;
   operator: 'lte' | 'gt';
   value: number;
   payments: PaymentSplit[];
 }
+
+// Display metadata for each rule condition. Drives the dropdown options, the
+// "Value (...)" unit hint, and the human-readable preview/list strings.
+const conditionMeta: Record<RuleCondition, { label: string; unit: string }> = {
+  months_to_csd: { label: 'Months to CSD', unit: 'months' },
+  contract_length: { label: 'Contract length', unit: 'months' },
+  comms_ur: { label: 'Unit rate uplift', unit: 'p/kWh' },
+  comms_sc: { label: 'Standing charge commission', unit: 'p/day' },
+  contract_value: { label: 'Total contract value', unit: '£' },
+  annual_consumption: { label: 'Annual consumption', unit: 'kWh/year' },
+};
 
 interface StructuredPaymentTerms {
   defaultPayments: PaymentSplit[];
@@ -794,11 +813,12 @@ export default function SuppliersPage() {
                     <label className="text-xs text-gray-600">Condition</label>
                     <select
                       value={rule.condition}
-                      onChange={(e) => updateConditionalRule(ruleIndex, 'condition', e.target.value, target)}
+                      onChange={(e) => updateConditionalRule(ruleIndex, 'condition', e.target.value as RuleCondition, target)}
                       className="input py-1 text-sm"
                     >
-                      <option value="months_to_csd">Months to CSD</option>
-                      <option value="contract_length">Contract Length</option>
+                      {(Object.entries(conditionMeta) as [RuleCondition, typeof conditionMeta[RuleCondition]][]).map(([key, meta]) => (
+                        <option key={key} value={key}>{meta.label}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -813,12 +833,13 @@ export default function SuppliersPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-600">Value (months)</label>
+                    <label className="text-xs text-gray-600">Value ({conditionMeta[rule.condition].unit})</label>
                     <input
                       type="number"
                       min="0"
+                      step="any"
                       value={rule.value}
-                      onChange={(e) => updateConditionalRule(ruleIndex, 'value', parseInt(e.target.value) || 0, target)}
+                      onChange={(e) => updateConditionalRule(ruleIndex, 'value', parseFloat(e.target.value) || 0, target)}
                       className="input py-1 text-sm"
                     />
                   </div>
@@ -1058,7 +1079,7 @@ export default function SuppliersPage() {
                           <p className="text-xs text-blue-700">Conditional rules:</p>
                           {rules.map((rule, i) => (
                             <p key={i} className="text-xs text-blue-800 mt-1">
-                              If {rule.condition.replace('_', ' ')} {rule.operator === 'lte' ? '≤' : '>'} {rule.value} months:
+                              If {conditionMeta[rule.condition]?.label.toLowerCase() ?? rule.condition.replace(/_/g, ' ')} {rule.operator === 'lte' ? '≤' : '>'} {rule.value} {conditionMeta[rule.condition]?.unit ?? ''}:
                               {' '}{generateDescription(rule.payments)}
                             </p>
                           ))}
@@ -1228,7 +1249,7 @@ export default function SuppliersPage() {
                                       {terms.conditionalRules.map((rule, ri) => (
                                         <div key={ri} className="mb-2 p-2 bg-white rounded">
                                           <p className="text-xs text-gray-600 mb-1">
-                                            If {rule.condition.replace('_', ' ')} {rule.operator === 'lte' ? '≤' : '>'} {rule.value} months:
+                                            If {conditionMeta[rule.condition]?.label.toLowerCase() ?? rule.condition.replace(/_/g, ' ')} {rule.operator === 'lte' ? '≤' : '>'} {rule.value} {conditionMeta[rule.condition]?.unit ?? ''}:
                                           </p>
                                           {rule.payments.map((p, pi) => (
                                             <div key={pi} className="flex items-center gap-2 ml-2">

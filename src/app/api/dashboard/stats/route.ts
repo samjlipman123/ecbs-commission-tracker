@@ -43,6 +43,7 @@ export async function GET() {
         contractEndDate: contract.contractEndDate,
         contractValue: contract.contractValue,
         commsUR: contract.commsUR,
+        commsSC: contract.commsSC,
         supplierName: contract.supplier.name,
         energyType: contract.energyType,
         upliftCap: contract.supplier.upliftCap,

@@ -150,6 +150,7 @@ export async function GET(request: Request) {
         contractEndDate: contract.contractEndDate,
         contractValue: contract.contractValue,
         commsUR: contract.commsUR,
+        commsSC: contract.commsSC,
         supplierName: contract.supplierName,
         energyType: contract.energyType,
         upliftCap: contract.supplier?.upliftCap ?? null,

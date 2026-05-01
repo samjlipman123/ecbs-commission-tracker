@@ -107,6 +107,7 @@ export async function PUT(
           contractEndDate: contract.contractEndDate,
           contractValue: contract.contractValue,
           commsUR: contract.commsUR,
+          commsSC: contract.commsSC,
           supplierName: supplier.name,
           energyType: contract.energyType,
           upliftCap: supplier.upliftCap,
