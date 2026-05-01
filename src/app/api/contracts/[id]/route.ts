@@ -108,6 +108,9 @@ export async function PUT(
       upliftCap: supplier.upliftCap,
       upliftCapElectric: supplier.upliftCapElectric,
       upliftCapGas: supplier.upliftCapGas,
+      paymentTermsJson: supplier.paymentTerms,
+      paymentTermsJsonElectric: supplier.paymentTermsElectric,
+      paymentTermsJsonGas: supplier.paymentTermsGas,
     });
 
     // Store new projections

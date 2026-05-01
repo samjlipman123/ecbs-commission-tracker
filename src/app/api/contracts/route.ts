@@ -131,6 +131,9 @@ export async function POST(request: NextRequest) {
       upliftCap: supplier.upliftCap,
       upliftCapElectric: supplier.upliftCapElectric,
       upliftCapGas: supplier.upliftCapGas,
+      paymentTermsJson: supplier.paymentTerms,
+      paymentTermsJsonElectric: supplier.paymentTermsElectric,
+      paymentTermsJsonGas: supplier.paymentTermsGas,
     });
 
     // Store projections

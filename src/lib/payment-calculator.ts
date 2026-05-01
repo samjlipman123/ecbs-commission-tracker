@@ -11,6 +11,9 @@ export interface ContractData {
   upliftCap?: number | null;       // Default cap from supplier
   upliftCapElectric?: number | null;
   upliftCapGas?: number | null;
+  paymentTermsJson?: string | null;         // StructuredPaymentTerms JSON; falls back to legacy dispatch if absent/unparseable
+  paymentTermsJsonElectric?: string | null; // Override for Electric/Power contracts; wins over paymentTermsJson when set
+  paymentTermsJsonGas?: string | null;      // Override for Gas contracts; wins over paymentTermsJson when set
 }
 
 export interface PaymentProjection {
@@ -18,6 +21,27 @@ export interface PaymentProjection {
   amount: number;
   paymentType: 'signature' | 'live' | 'reconciliation' | 'arrears';
 }
+
+// Structured payment terms shape — authored in src/app/suppliers/page.tsx
+type PaymentSplit = {
+  percentage: number;
+  trigger: 'lock_in' | 'csd' | 'ced';
+  timing: 'at' | 'before' | 'after';
+  monthsOffset: number;
+  paymentType: 'signature' | 'live' | 'reconciliation' | 'arrears';
+};
+
+type ConditionalRule = {
+  condition: 'months_to_csd' | 'contract_length';
+  operator: 'lte' | 'gt';
+  value: number;
+  payments: PaymentSplit[];
+};
+
+type StructuredPaymentTerms = {
+  defaultPayments: PaymentSplit[];
+  conditionalRules?: ConditionalRule[];
+};
 
 // Helper to check if two dates are in the same month
 function sameMonth(date1: Date, date2: Date): boolean {
@@ -36,6 +60,15 @@ function resolveUpliftCap(contract: ContractData): number | null {
   if (fuel === 'gas' && contract.upliftCapGas != null) return contract.upliftCapGas;
   if (fuel !== 'gas' && contract.upliftCapElectric != null) return contract.upliftCapElectric;
   return contract.upliftCap ?? null;
+}
+
+// Resolve the structured payment terms JSON that applies to this contract, given fuel type.
+// Per-fuel overrides win over the default; null falls through to legacy text/dispatch.
+function resolvePaymentTermsJson(contract: ContractData): string | null {
+  const fuel = (contract.energyType || '').toLowerCase();
+  if (fuel === 'gas' && contract.paymentTermsJsonGas != null) return contract.paymentTermsJsonGas;
+  if (fuel !== 'gas' && contract.paymentTermsJsonElectric != null) return contract.paymentTermsJsonElectric;
+  return contract.paymentTermsJson ?? null;
 }
 
 // Spread an arrears total across the months from CSD to CED inclusive.
@@ -536,8 +569,107 @@ function calculateDefault(contract: ContractData): PaymentProjection[] {
   return projections;
 }
 
+// --- Structured payment terms interpreter ---
+// Reads Supplier.paymentTerms JSON and produces projections directly,
+// so any rule editable in the Suppliers admin UI is honoured without code changes.
+
+function parseStructuredTerms(json: string | null | undefined): StructuredPaymentTerms | null {
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json);
+    if (
+      parsed &&
+      Array.isArray(parsed.defaultPayments) &&
+      parsed.defaultPayments.length > 0
+    ) {
+      return parsed as StructuredPaymentTerms;
+    }
+  } catch {
+    // Legacy text-only paymentTerms — caller will fall back to hardcoded dispatch.
+  }
+  return null;
+}
+
+function pickActivePayments(
+  contract: ContractData,
+  terms: StructuredPaymentTerms
+): PaymentSplit[] {
+  if (!terms.conditionalRules) return terms.defaultPayments;
+  for (const rule of terms.conditionalRules) {
+    const actual =
+      rule.condition === 'months_to_csd'
+        ? differenceInMonths(contract.contractStartDate, contract.lockInDate)
+        : differenceInMonths(contract.contractEndDate, contract.contractStartDate);
+    const matches = rule.operator === 'lte' ? actual <= rule.value : actual > rule.value;
+    if (matches) return rule.payments;
+  }
+  return terms.defaultPayments;
+}
+
+function paymentMonthForSplit(contract: ContractData, split: PaymentSplit): Date {
+  const base =
+    split.trigger === 'lock_in'
+      ? contract.lockInDate
+      : split.trigger === 'csd'
+      ? contract.contractStartDate
+      : contract.contractEndDate;
+  const offset =
+    split.timing === 'at' ? 0 : split.timing === 'before' ? -split.monthsOffset : split.monthsOffset;
+  return startOfMonth(addMonths(base, offset));
+}
+
+function applyStructuredTerms(
+  contract: ContractData,
+  terms: StructuredPaymentTerms
+): PaymentProjection[] {
+  const projections: PaymentProjection[] = [];
+
+  // Uplift cap: anything over cap is paid monthly in arrears, capped portion follows the structured splits.
+  const cap = resolveUpliftCap(contract);
+  const overCap = cap != null && contract.commsUR > cap;
+  const cappedValue = overCap ? contract.contractValue * (cap! / contract.commsUR) : contract.contractValue;
+  const overCapValue = contract.contractValue - cappedValue;
+
+  const activePayments = pickActivePayments(contract, terms);
+  const contractMonths =
+    differenceInMonths(contract.contractEndDate, contract.contractStartDate) + 1;
+
+  for (const split of activePayments) {
+    const splitValue = cappedValue * (split.percentage / 100);
+    if (splitValue <= 0) continue;
+    const startMonth = paymentMonthForSplit(contract, split);
+
+    if (split.paymentType === 'arrears') {
+      if (contractMonths <= 0) continue;
+      const monthly = splitValue / contractMonths;
+      let m = startMonth;
+      for (let i = 0; i < contractMonths; i++) {
+        projections.push({ month: new Date(m), amount: monthly, paymentType: 'arrears' });
+        m = addMonths(m, 1);
+      }
+    } else {
+      projections.push({ month: startMonth, amount: splitValue, paymentType: split.paymentType });
+    }
+  }
+
+  if (overCapValue > 0) {
+    projections.push(
+      ...spreadArrears(overCapValue, contract.contractStartDate, contract.contractEndDate)
+    );
+  }
+
+  return projections;
+}
+
 // Main calculation function
 export function calculatePaymentProjections(contract: ContractData): PaymentProjection[] {
+  // Prefer structured payment terms when the supplier has been configured via the Suppliers UI.
+  const structured = parseStructuredTerms(resolvePaymentTermsJson(contract));
+  if (structured) {
+    return applyStructuredTerms(contract, structured);
+  }
+
+  // Legacy fallback: suppliers whose paymentTerms is still free-text from the seed.
   const supplierName = contract.supplierName.trim().toLowerCase();
 
   // British Gas

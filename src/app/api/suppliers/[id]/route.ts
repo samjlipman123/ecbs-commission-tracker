@@ -45,7 +45,16 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, paymentTerms, upliftCap, upliftCapElectric, upliftCapGas, isActive } = body;
+    const {
+      name,
+      paymentTerms,
+      paymentTermsElectric,
+      paymentTermsGas,
+      upliftCap,
+      upliftCapElectric,
+      upliftCapGas,
+      isActive,
+    } = body;
 
     // Check if supplier exists
     const existing = await prisma.supplier.findUnique({
@@ -71,6 +80,8 @@ export async function PUT(
       data: {
         ...(name && { name }),
         ...(paymentTerms !== undefined && { paymentTerms }),
+        ...(paymentTermsElectric !== undefined && { paymentTermsElectric }),
+        ...(paymentTermsGas !== undefined && { paymentTermsGas }),
         ...(upliftCap !== undefined && { upliftCap }),
         ...(upliftCapElectric !== undefined && { upliftCapElectric }),
         ...(upliftCapGas !== undefined && { upliftCapGas }),
@@ -101,6 +112,9 @@ export async function PUT(
           upliftCap: supplier.upliftCap,
           upliftCapElectric: supplier.upliftCapElectric,
           upliftCapGas: supplier.upliftCapGas,
+          paymentTermsJson: supplier.paymentTerms,
+          paymentTermsJsonElectric: supplier.paymentTermsElectric,
+          paymentTermsJsonGas: supplier.paymentTermsGas,
         });
 
         if (projections.length > 0) {

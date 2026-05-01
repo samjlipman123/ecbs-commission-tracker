@@ -121,15 +121,17 @@ export async function GET(request: Request) {
 
     // Create contracts one by one to avoid transaction limits
     const createdContracts = [];
-    const supplierMap = new Map(suppliers.map(s => [s.id, s.name]));
+    const supplierMap = new Map(suppliers.map(s => [s.id, s]));
 
     for (const { supplierName, ...contractData } of contractsToCreate) {
       const contract = await prisma.contract.create({
         data: contractData,
       });
+      const supplier = supplierMap.get(contract.supplierId);
       createdContracts.push({
         ...contract,
-        supplierName: supplierMap.get(contract.supplierId) || supplierName,
+        supplierName: supplier?.name || supplierName,
+        supplier,
       });
     }
 
@@ -149,6 +151,13 @@ export async function GET(request: Request) {
         contractValue: contract.contractValue,
         commsUR: contract.commsUR,
         supplierName: contract.supplierName,
+        energyType: contract.energyType,
+        upliftCap: contract.supplier?.upliftCap ?? null,
+        upliftCapElectric: contract.supplier?.upliftCapElectric ?? null,
+        upliftCapGas: contract.supplier?.upliftCapGas ?? null,
+        paymentTermsJson: contract.supplier?.paymentTerms ?? null,
+        paymentTermsJsonElectric: contract.supplier?.paymentTermsElectric ?? null,
+        paymentTermsJsonGas: contract.supplier?.paymentTermsGas ?? null,
       });
 
       for (const p of projections) {

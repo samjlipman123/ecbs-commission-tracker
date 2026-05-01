@@ -44,6 +44,13 @@ export async function GET() {
         contractValue: contract.contractValue,
         commsUR: contract.commsUR,
         supplierName: contract.supplier.name,
+        energyType: contract.energyType,
+        upliftCap: contract.supplier.upliftCap,
+        upliftCapElectric: contract.supplier.upliftCapElectric,
+        upliftCapGas: contract.supplier.upliftCapGas,
+        paymentTermsJson: contract.supplier.paymentTerms,
+        paymentTermsJsonElectric: contract.supplier.paymentTermsElectric,
+        paymentTermsJsonGas: contract.supplier.paymentTermsGas,
       });
 
       for (const p of projections) {

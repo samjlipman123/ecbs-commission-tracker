@@ -36,7 +36,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const { name, paymentTerms, upliftCap, upliftCapElectric, upliftCapGas } = body;
+    const {
+      name,
+      paymentTerms,
+      paymentTermsElectric,
+      paymentTermsGas,
+      upliftCap,
+      upliftCapElectric,
+      upliftCapGas,
+    } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
@@ -52,6 +60,8 @@ export async function POST(request: NextRequest) {
       data: {
         name,
         paymentTerms: paymentTerms || '',
+        paymentTermsElectric: paymentTermsElectric ?? null,
+        paymentTermsGas: paymentTermsGas ?? null,
         upliftCap: toFloat(upliftCap),
         upliftCapElectric: toFloat(upliftCapElectric),
         upliftCapGas: toFloat(upliftCapGas),
